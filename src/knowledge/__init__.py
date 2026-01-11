@@ -25,3 +25,47 @@ Example:
     graph_results = await neo4j.get_related_entities(entity_id)
     reranked = await reranker.rerank(query, vector_results + graph_results)
 """
+
+from src.knowledge.neo4j_client import (
+    Neo4jClient,
+    create_sample_business,
+    create_sample_location,
+    initialize_schema,
+    test_connection as test_neo4j_connection,
+)
+from src.knowledge.pinecone_client import (
+    PineconeClient,
+    ReviewMetadata,
+    VectorRecord,
+    test_connection as test_pinecone_connection,
+)
+from src.knowledge.embeddings import (
+    EmbeddingsService,
+    test_embeddings,
+)
+from src.knowledge.reranker import (
+    RerankerService,
+    RerankResult,
+    test_reranker,
+)
+
+__all__ = [
+    # Neo4j
+    "Neo4jClient",
+    "initialize_schema",
+    "create_sample_business",
+    "create_sample_location",
+    "test_neo4j_connection",
+    # Pinecone
+    "PineconeClient",
+    "ReviewMetadata",
+    "VectorRecord",
+    "test_pinecone_connection",
+    # Embeddings
+    "EmbeddingsService",
+    "test_embeddings",
+    # Reranker
+    "RerankerService",
+    "RerankResult",
+    "test_reranker",
+]

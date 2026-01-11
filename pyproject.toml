@@ -14,8 +14,10 @@ langchain = "^0.3"
 langchain-anthropic = "^0.3"
 langchain-openai = "^0.3"
 langchain-community = "^0.3"
+# OpenAI SDK
+openai = "^1.0"
 # Vector & Graph Databases
-pinecone-client = "^3.0"
+pinecone = "^5.0"
 neo4j = "^5.0"
 # API Framework
 fastapi = "^0.115"

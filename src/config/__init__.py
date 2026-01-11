@@ -23,3 +23,7 @@ Example:
     # Settings are validated at startup
     # Invalid configuration will raise ValidationError
 """
+
+from src.config.settings import Settings, get_settings, settings
+
+__all__ = ["Settings", "get_settings", "settings"]
