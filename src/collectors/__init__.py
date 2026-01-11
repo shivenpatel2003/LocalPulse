@@ -1,22 +1,26 @@
 """
-Collectors Module
+Data Source Integrations.
 
-This module contains data collection agents for various sources:
-- GooglePlacesCollector: Collects business data from Google Places API
-- ReviewCollector: Aggregates reviews from multiple platforms
-- SocialMediaCollector: Monitors social media mentions
-- MenuCollector: Extracts and tracks menu information
+This module contains collectors for gathering data from external sources:
+
+- google_places: Google Places API for business info, reviews, and photos
+- social: Social media monitoring (Instagram, Twitter/X mentions)
+- events: Local event aggregation (concerts, festivals, community events)
+- scraper: Web scraping utilities for additional data sources
+
+Collectors follow a common interface with async methods:
+- collect(): Fetch raw data from the source
+- transform(): Normalize data to internal schemas
+- validate(): Ensure data quality and completeness
+
+Example:
+    from src.collectors import GooglePlacesCollector
+
+    collector = GooglePlacesCollector(api_key=settings.google_places_api_key)
+    businesses = await collector.collect(
+        query="restaurants",
+        location="San Francisco, CA",
+        radius=5000
+    )
+    normalized = await collector.transform(businesses)
 """
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .base import BaseCollector
-    from .google_places import GooglePlacesCollector
-    from .reviews import ReviewCollector
-
-__all__ = [
-    "BaseCollector",
-    "GooglePlacesCollector",
-    "ReviewCollector",
-]

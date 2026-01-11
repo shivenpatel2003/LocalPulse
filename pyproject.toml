@@ -1,0 +1,73 @@
+[tool.poetry]
+name = "localpulse"
+version = "0.1.0"
+description = "AI-powered restaurant monitoring and competitive intelligence platform"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+# LangChain & LangGraph
+langgraph = "^0.2"
+langchain = "^0.3"
+langchain-anthropic = "^0.3"
+langchain-openai = "^0.3"
+langchain-community = "^0.3"
+# Vector & Graph Databases
+pinecone-client = "^3.0"
+neo4j = "^5.0"
+# API Framework
+fastapi = "^0.115"
+uvicorn = {extras = ["standard"], version = "^0.32"}
+# Data Validation & Settings
+pydantic = "^2.0"
+pydantic-settings = "^2.0"
+# HTTP & Web
+httpx = "^0.28"
+aiohttp = "^3.0"
+beautifulsoup4 = "^4.12"
+# Embeddings & Reranking
+sentence-transformers = "^3.0"
+cohere = "^5.0"
+# Observability
+structlog = "^24.0"
+opentelemetry-api = "^1.0"
+opentelemetry-sdk = "^1.0"
+# Utilities
+python-dotenv = "^1.0"
+tenacity = "^9.0"
+orjson = "^3.0"
+# Email & Reports
+jinja2 = "^3.0"
+plotly = "^5.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.24"
+pytest-cov = "^6.0"
+mypy = "^1.0"
+ruff = "^0.8"
+pre-commit = "^4.0"
+httpx = "^0.28"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,24 +1,20 @@
 """
-Agents Module
+LangGraph Agent Definitions.
 
-This module contains the multi-agent system components:
-- BaseAgent: Abstract base class for all agents
-- AnalysisAgent: Performs competitive analysis and insight generation
-- OrchestratorAgent: Coordinates multiple agents and manages workflows
-- MemoryAgent: Manages tiered memory (short-term, episodic, long-term)
+This module contains the multi-agent system powered by LangGraph:
+
+- supervisor: Orchestrator agent that routes tasks and manages workflow state
+- collector: Data collection agent that interfaces with external APIs
+- analyst: Analysis agent powered by Claude for insight generation
+- reporter: Report generation agent for creating deliverables
+
+The agents follow a supervisor-worker pattern where the supervisor
+delegates tasks to specialized worker agents based on the current
+workflow state and user requirements.
+
+Example:
+    from src.agents import SupervisorAgent, CollectorAgent
+
+    supervisor = SupervisorAgent()
+    result = await supervisor.run(task="analyze_competitor", target="restaurant_id")
 """
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .base import BaseAgent
-    from .analysis import AnalysisAgent
-    from .orchestrator import OrchestratorAgent
-    from .memory import MemoryAgent
-
-__all__ = [
-    "BaseAgent",
-    "AnalysisAgent",
-    "OrchestratorAgent",
-    "MemoryAgent",
-]
