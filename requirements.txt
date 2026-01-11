@@ -1,0 +1,33 @@
+# LocalPulse - AI-Powered Restaurant Monitoring Platform
+# Core dependencies
+
+# API Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Database & Vector Store
+supabase>=2.0.0
+pgvector>=0.2.0
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# HTTP Client
+httpx>=0.25.0
+
+# AI/ML
+anthropic>=0.18.0
+openai>=1.12.0
+
+# Data Processing
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Async Support
+asyncio-throttle>=1.0.0
+
+# Scheduling
+apscheduler>=3.10.0
+
+# Logging & Monitoring
+structlog>=23.2.0
