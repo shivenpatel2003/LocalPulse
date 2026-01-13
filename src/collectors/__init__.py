@@ -16,11 +16,27 @@ Collectors follow a common interface with async methods:
 Example:
     from src.collectors import GooglePlacesCollector
 
-    collector = GooglePlacesCollector(api_key=settings.google_places_api_key)
-    businesses = await collector.collect(
-        query="restaurants",
-        location="San Francisco, CA",
-        radius=5000
-    )
-    normalized = await collector.transform(businesses)
+    async with GooglePlacesCollector() as collector:
+        places = await collector.search_places("Italian restaurant", "Manchester, UK")
+        details = await collector.get_place_details(places[0]["id"])
+        reviews = await collector.get_place_reviews(places[0]["id"])
+        competitors = await collector.find_nearby_competitors(places[0]["id"])
 """
+
+from src.collectors.google_places import (
+    GooglePlacesCollector,
+    GooglePlacesError,
+    GooglePlacesAuthError,
+    GooglePlacesRateLimitError,
+    GooglePlacesNotFoundError,
+    test_google_places,
+)
+
+__all__ = [
+    "GooglePlacesCollector",
+    "GooglePlacesError",
+    "GooglePlacesAuthError",
+    "GooglePlacesRateLimitError",
+    "GooglePlacesNotFoundError",
+    "test_google_places",
+]
