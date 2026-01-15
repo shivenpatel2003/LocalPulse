@@ -1105,7 +1105,7 @@ async def render_html_report(state: ReportState) -> dict:
 
 
 async def send_email(state: ReportState) -> dict:
-    """Send the report via SendGrid.
+    """Send the report via SendGrid using EmailService.
 
     Args:
         state: Current state with HTML report.
@@ -1116,46 +1116,59 @@ async def send_email(state: ReportState) -> dict:
     html = state.get("report_html", "")
     report_data = state.get("report_data", {})
     business_name = report_data.get("business_name", "Unknown")
+    owner_email = state.get("owner_email")
 
-    logger.info("report_send_email", business_name=business_name)
+    logger.info("report_send_email", business_name=business_name, has_email=bool(owner_email))
 
-    # For now, we'll skip actual sending and just mark as complete
-    # In production, this would use SendGrid API
+    # If no recipient email provided, skip sending
+    if not owner_email:
+        logger.warning("report_email_skipped", reason="No recipient email provided")
+        return {
+            "email_sent": False,
+            "status": ReportStatus.COMPLETED.value,
+        }
 
     try:
-        settings = get_settings()
-        sendgrid_key = settings.sendgrid_api_key.get_secret_value() if settings.sendgrid_api_key else None
+        # Use the EmailService to send the report
+        from src.delivery.email_service import get_email_service
 
-        if not sendgrid_key:
-            logger.warning("report_email_skipped", reason="No SendGrid API key")
+        email_service = get_email_service()
+
+        if not email_service.is_configured:
+            logger.warning("report_email_skipped", reason="SendGrid API key not configured")
             return {
                 "email_sent": False,
                 "status": ReportStatus.COMPLETED.value,
                 "errors": ["Email skipped: SendGrid API key not configured"],
             }
 
-        # Placeholder for SendGrid integration
-        # In production:
-        # import sendgrid
-        # from sendgrid.helpers.mail import Mail, Email, To, Content
-        # sg = sendgrid.SendGridAPIClient(api_key=sendgrid_key)
-        # message = Mail(
-        #     from_email=Email("reports@localpulse.ai"),
-        #     to_emails=To("owner@restaurant.com"),
-        #     subject=f"Your Weekly Intelligence Report - {business_name}",
-        #     html_content=Content("text/html", html)
-        # )
-        # response = sg.send(message)
+        # Determine report period
+        report_period = datetime.now(timezone.utc).strftime("%B %Y")
 
-        logger.info("report_email_sent")
+        # Send the report email
+        success = await email_service.send_report(
+            to_email=owner_email,
+            business_name=business_name,
+            report_html=html,
+            report_date=report_period,
+        )
 
-        return {
-            "email_sent": True,
-            "status": ReportStatus.COMPLETED.value,
-        }
+        if success:
+            logger.info("report_email_sent", to=owner_email)
+            return {
+                "email_sent": True,
+                "status": ReportStatus.COMPLETED.value,
+            }
+        else:
+            logger.error("report_email_failed", to=owner_email)
+            return {
+                "email_sent": False,
+                "errors": ["Email send failed - check logs for details"],
+                "status": ReportStatus.COMPLETED.value,
+            }
 
     except Exception as e:
-        logger.error("report_email_failed", error=str(e))
+        logger.error("report_email_error", error=str(e))
         return {
             "email_sent": False,
             "errors": [f"Email send failed: {str(e)}"],

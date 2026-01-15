@@ -77,6 +77,18 @@ class Settings(BaseSettings):
     # SendGrid (Email Delivery)
     # -------------------------------------------------------------------------
     sendgrid_api_key: SecretStr = Field(..., description="SendGrid API key for emails")
+    from_email: str = Field(
+        default="reports@localpulse.io",
+        description="Sender email address for outgoing emails",
+    )
+    from_name: str = Field(
+        default="LocalPulse",
+        description="Sender display name for outgoing emails",
+    )
+    reply_to_email: str = Field(
+        default="support@localpulse.io",
+        description="Reply-to email address",
+    )
 
     # -------------------------------------------------------------------------
     # Application Settings
