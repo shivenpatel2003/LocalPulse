@@ -33,6 +33,7 @@ from src.api.routes.health import router as health_router, set_server_start_time
 from src.api.routes.clients import router as clients_router
 from src.api.routes.reports import router as reports_router
 from src.api.routes.schedules import router as schedules_router
+from src.api.routes.onboarding import router as onboarding_router
 from src.config.settings import get_settings
 from src.scheduler.scheduler import Scheduler
 
@@ -147,6 +148,10 @@ app = FastAPI(
             "name": "Schedules",
             "description": "Schedule management - pause, resume, and view scheduled jobs",
         },
+        {
+            "name": "Onboarding",
+            "description": "AI-powered configuration generation - describe your business and get a custom monitoring setup",
+        },
     ],
 )
 
@@ -248,6 +253,7 @@ api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(clients_router)
 api_v1_router.include_router(reports_router)
 api_v1_router.include_router(schedules_router)
+api_v1_router.include_router(onboarding_router)
 
 # Include the versioned router
 app.include_router(api_v1_router)
@@ -267,6 +273,7 @@ async def api_v1_root() -> dict:
             "clients": "/api/v1/clients",
             "reports": "/api/v1/reports",
             "schedules": "/api/v1/schedules",
+            "onboarding": "/api/v1/onboard",
         },
         "documentation": "/docs",
     }
