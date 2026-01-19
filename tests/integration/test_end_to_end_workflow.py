@@ -41,7 +41,8 @@ class TestEndToEndWorkflow:
         from src.agents.research.tools import collect_business_data
 
         # Mock the collector to return test data
-        with patch('src.agents.research.tools.get_collector') as mock_get:
+        # Patch at the point of import in the tools module
+        with patch('src.collectors.registry.get_collector') as mock_get:
             mock_collector = AsyncMock()
 
             async def mock_collect():
