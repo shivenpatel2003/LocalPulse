@@ -3,18 +3,33 @@ LangGraph Agent Definitions.
 
 This module contains the multi-agent system powered by LangGraph:
 
-- supervisor: Orchestrator agent that routes tasks and manages workflow state
-- collector: Data collection agent that interfaces with external APIs
+- research: Research agent for competitive intelligence data collection
 - analyst: Analysis agent powered by Claude for insight generation
-- reporter: Report generation agent for creating deliverables
+- creator: Content creation agent for report generation
+- communication: Communication agent for report delivery
 
 The agents follow a supervisor-worker pattern where the supervisor
 delegates tasks to specialized worker agents based on the current
 workflow state and user requirements.
 
 Example:
-    from src.agents import SupervisorAgent, CollectorAgent
+    from src.agents import ResearchAgent, AnalystAgent
 
-    supervisor = SupervisorAgent()
-    result = await supervisor.run(task="analyze_competitor", target="restaurant_id")
+    research = ResearchAgent()
+    result = await research.execute("Find coffee shops in Austin")
 """
+
+from src.agents.base import BaseAgent, AgentConfig
+from src.agents.research import ResearchAgent
+from src.agents.analyst import AnalystAgent
+from src.agents.creator import CreatorAgent
+from src.agents.communication import CommunicationAgent
+
+__all__ = [
+    "BaseAgent",
+    "AgentConfig",
+    "ResearchAgent",
+    "AnalystAgent",
+    "CreatorAgent",
+    "CommunicationAgent",
+]
