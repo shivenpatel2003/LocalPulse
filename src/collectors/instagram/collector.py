@@ -4,7 +4,7 @@ Provides InstagramCollector for collecting and normalizing Instagram
 posts, profiles, and hashtag searches.
 """
 
-import logging
+import structlog
 from typing import Any
 
 from src.collectors.base import BaseCollector
@@ -15,8 +15,17 @@ from src.collectors.instagram.normalizer import (
 )
 from src.collectors.normalization.schema import CollectedContent
 from src.collectors.registry import CollectorType, register_collector
+from src.core.exceptions import (
+    CollectorError,
+    CollectorNotFoundError,
+    CollectorUnavailableError,
+)
+from src.core.circuit_breaker import get_circuit_breaker
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
+
+# Circuit breaker for Instagram/Apify API
+_instagram_breaker = get_circuit_breaker("instagram", failure_threshold=5, recovery_timeout=60)
 
 
 @register_collector(CollectorType.INSTAGRAM)
@@ -55,40 +64,111 @@ class InstagramCollector(BaseCollector):
 
         Returns:
             List of normalized CollectedContent instances
+
+        Raises:
+            CollectorUnavailableError: If circuit breaker is open
+            CollectorError: For API failures
         """
-        logger.info(f"Collecting Instagram posts for @{username} (limit={limit})")
-        raw_posts = await self.client.scrape_posts(username, limit=limit)
+        logger.info("collecting_instagram_posts", username=username, limit=limit)
 
-        results = []
-        for raw in raw_posts:
-            try:
-                content = transform_instagram_post(raw)
-                results.append(content)
-            except Exception as e:
-                logger.warning(f"Failed to transform post {raw.get('id')}: {e}")
-                continue
+        if not _instagram_breaker.can_execute():
+            recovery_time = _instagram_breaker.time_until_recovery()
+            raise CollectorUnavailableError(
+                "instagram",
+                f"Circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"username": username, "recovery_time": recovery_time},
+            )
 
-        logger.info(f"Collected {len(results)} posts for @{username}")
-        return results
+        try:
+            raw_posts = await self.client.scrape_posts(username, limit=limit)
+            await _instagram_breaker.record_success()
 
-    async def collect_user_profile(self, username: str) -> CollectedContent | None:
+            results = []
+            for raw in raw_posts:
+                try:
+                    content = transform_instagram_post(raw)
+                    results.append(content)
+                except Exception as e:
+                    logger.warning(
+                        "instagram_post_transform_failed",
+                        post_id=raw.get("id"),
+                        error=str(e),
+                    )
+                    continue
+
+            logger.info("instagram_posts_collected", username=username, count=len(results))
+            return results
+
+        except CollectorUnavailableError:
+            raise
+        except Exception as e:
+            await _instagram_breaker.record_failure()
+            logger.error(
+                "instagram_posts_collection_failed",
+                username=username,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise CollectorError(
+                "instagram",
+                f"Failed to collect posts for @{username}: {e}",
+                {"username": username, "original_error": str(e)},
+            )
+
+    async def collect_user_profile(self, username: str) -> CollectedContent:
         """Collect profile data for a specific user.
 
         Args:
             username: Instagram username (without @)
 
         Returns:
-            Normalized CollectedContent instance or None if failed
+            Normalized CollectedContent instance
+
+        Raises:
+            CollectorNotFoundError: If profile not found
+            CollectorUnavailableError: If service is unavailable
+            CollectorError: For other errors
         """
-        logger.info(f"Collecting Instagram profile for @{username}")
+        logger.info("collecting_instagram_profile", username=username)
+
+        if not _instagram_breaker.can_execute():
+            recovery_time = _instagram_breaker.time_until_recovery()
+            raise CollectorUnavailableError(
+                "instagram",
+                f"Circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"username": username, "recovery_time": recovery_time},
+            )
+
         try:
             raw_profile = await self.client.scrape_profile(username)
-            if raw_profile:
-                return transform_instagram_profile(raw_profile)
-            return None
+
+            if not raw_profile:
+                await _instagram_breaker.record_failure()
+                raise CollectorNotFoundError(
+                    "instagram",
+                    f"Profile not found: @{username}",
+                    {"username": username},
+                )
+
+            await _instagram_breaker.record_success()
+            return transform_instagram_profile(raw_profile)
+
+        except (CollectorNotFoundError, CollectorUnavailableError):
+            # Re-raise our own exceptions
+            raise
         except Exception as e:
-            logger.error(f"Failed to collect profile for @{username}: {e}")
-            return None
+            await _instagram_breaker.record_failure()
+            logger.error(
+                "instagram_profile_collection_failed",
+                username=username,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise CollectorError(
+                "instagram",
+                f"Failed to collect profile for @{username}: {e}",
+                {"username": username, "original_error": str(e)},
+            )
 
     async def search_hashtag(
         self,
@@ -103,21 +183,56 @@ class InstagramCollector(BaseCollector):
 
         Returns:
             List of normalized CollectedContent instances
+
+        Raises:
+            CollectorUnavailableError: If circuit breaker is open
+            CollectorError: For API failures
         """
-        logger.info(f"Searching Instagram hashtag: #{hashtag} (limit={limit})")
-        raw_posts = await self.client.scrape_hashtag(hashtag, limit=limit)
+        logger.info("searching_instagram_hashtag", hashtag=hashtag, limit=limit)
 
-        results = []
-        for raw in raw_posts:
-            try:
-                content = transform_instagram_post(raw)
-                results.append(content)
-            except Exception as e:
-                logger.warning(f"Failed to transform post {raw.get('id')}: {e}")
-                continue
+        if not _instagram_breaker.can_execute():
+            recovery_time = _instagram_breaker.time_until_recovery()
+            raise CollectorUnavailableError(
+                "instagram",
+                f"Circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"hashtag": hashtag, "recovery_time": recovery_time},
+            )
 
-        logger.info(f"Found {len(results)} posts for #{hashtag}")
-        return results
+        try:
+            raw_posts = await self.client.scrape_hashtag(hashtag, limit=limit)
+            await _instagram_breaker.record_success()
+
+            results = []
+            for raw in raw_posts:
+                try:
+                    content = transform_instagram_post(raw)
+                    results.append(content)
+                except Exception as e:
+                    logger.warning(
+                        "instagram_post_transform_failed",
+                        post_id=raw.get("id"),
+                        error=str(e),
+                    )
+                    continue
+
+            logger.info("instagram_hashtag_results", hashtag=hashtag, count=len(results))
+            return results
+
+        except CollectorUnavailableError:
+            raise
+        except Exception as e:
+            await _instagram_breaker.record_failure()
+            logger.error(
+                "instagram_hashtag_search_failed",
+                hashtag=hashtag,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise CollectorError(
+                "instagram",
+                f"Failed to search hashtag #{hashtag}: {e}",
+                {"hashtag": hashtag, "original_error": str(e)},
+            )
 
     async def health_check(self) -> bool:
         """Check if the collector is operational.

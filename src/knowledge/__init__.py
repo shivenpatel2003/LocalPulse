@@ -5,7 +5,8 @@ This module provides the knowledge layer combining graph and vector databases:
 
 - neo4j_client: Neo4j connection management and Cypher query execution
 - pinecone_client: Pinecone vector store operations (upsert, query, delete)
-- embeddings: Text embedding generation using OpenAI text-embedding-3-small
+- cohere_embeddings: Text embedding generation using Cohere embed-v3 (FREE tier)
+- embeddings: Legacy OpenAI embeddings (requires paid account)
 - reranker: Cohere Rerank integration for relevance scoring
 
 The knowledge layer implements Adaptive RAG with hybrid retrieval:
@@ -14,11 +15,11 @@ The knowledge layer implements Adaptive RAG with hybrid retrieval:
 3. Reranking with Cohere for optimal context assembly
 
 Example:
-    from src.knowledge import Neo4jClient, PineconeClient, EmbeddingService
+    from src.knowledge import Neo4jClient, PineconeClient, EmbeddingsService
 
     neo4j = Neo4jClient()
     pinecone = PineconeClient()
-    embeddings = EmbeddingService()
+    embeddings = EmbeddingsService()  # Uses Cohere by default
 
     # Hybrid retrieval
     vector_results = await pinecone.query(embedding, top_k=20)
@@ -39,9 +40,15 @@ from src.knowledge.pinecone_client import (
     VectorRecord,
     test_connection as test_pinecone_connection,
 )
+# Use Cohere embeddings as default (free tier, 1024 dimensions)
+from src.knowledge.cohere_embeddings import (
+    CohereEmbeddingsService as EmbeddingsService,
+    test_cohere_embeddings as test_embeddings,
+)
+# Keep OpenAI available for users with paid accounts
 from src.knowledge.embeddings import (
-    EmbeddingsService,
-    test_embeddings,
+    EmbeddingsService as OpenAIEmbeddingsService,
+    test_embeddings as test_openai_embeddings,
 )
 from src.knowledge.reranker import (
     RerankerService,
@@ -61,9 +68,12 @@ __all__ = [
     "ReviewMetadata",
     "VectorRecord",
     "test_pinecone_connection",
-    # Embeddings
+    # Embeddings (Cohere - default)
     "EmbeddingsService",
     "test_embeddings",
+    # Embeddings (OpenAI - legacy)
+    "OpenAIEmbeddingsService",
+    "test_openai_embeddings",
     # Reranker
     "RerankerService",
     "RerankResult",

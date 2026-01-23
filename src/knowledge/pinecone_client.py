@@ -2,7 +2,7 @@
 Pinecone Vector Store Client.
 
 Provides connection management and vector operations for the LocalPulse
-semantic search layer. Uses text-embedding-3-large (3072 dimensions).
+semantic search layer. Uses Cohere embed-v3 (1024 dimensions).
 """
 
 from __future__ import annotations
@@ -13,10 +13,20 @@ from typing import Any, TypedDict
 
 import structlog
 from pinecone import Pinecone, ServerlessSpec
+from pinecone.exceptions import PineconeException
 
 from src.config import settings
+from src.core.circuit_breaker import get_circuit_breaker
+from src.core.exceptions import (
+    KnowledgeStoreConnectionError,
+    KnowledgeStoreError,
+    KnowledgeStoreQueryError,
+)
 
 logger = structlog.get_logger(__name__)
+
+# Circuit breaker for Pinecone operations
+_pinecone_breaker = get_circuit_breaker("pinecone", failure_threshold=5, recovery_timeout=60)
 
 
 # =============================================================================
@@ -69,7 +79,7 @@ class PineconeClient:
     """
 
     # Index configuration
-    DIMENSION = 3072  # text-embedding-3-large
+    DIMENSION = 1024  # Cohere embed-v3
     METRIC = "cosine"
     CLOUD = "aws"
     REGION = "us-east-1"
@@ -92,12 +102,23 @@ class PineconeClient:
         self._index: Any = None
 
     def connect(self) -> None:
-        """Initialize connection to Pinecone."""
+        """Initialize connection to Pinecone.
+
+        Raises:
+            KnowledgeStoreConnectionError: If connection fails.
+        """
         if self._client is not None:
             return
 
-        self._client = Pinecone(api_key=self._api_key)
-        logger.info("pinecone_client_initialized")
+        try:
+            self._client = Pinecone(api_key=self._api_key)
+            logger.info("pinecone_client_initialized")
+        except Exception as e:
+            logger.error("pinecone_connection_failed", error=str(e), error_type=type(e).__name__)
+            raise KnowledgeStoreConnectionError(
+                f"Failed to initialize Pinecone client: {e}",
+                {"original_error": str(e)},
+            )
 
     @property
     def client(self) -> Pinecone:
@@ -119,37 +140,59 @@ class PineconeClient:
 
         Args:
             wait_for_ready: Wait for index to be ready before returning.
+
+        Raises:
+            KnowledgeStoreConnectionError: If index creation or connection fails.
         """
-        existing_indexes = [idx.name for idx in self.client.list_indexes()]
+        try:
+            existing_indexes = [idx.name for idx in self.client.list_indexes()]
 
-        if self._index_name not in existing_indexes:
-            logger.info(
-                "pinecone_creating_index",
+            if self._index_name not in existing_indexes:
+                logger.info(
+                    "pinecone_creating_index",
+                    index_name=self._index_name,
+                    dimension=self.DIMENSION,
+                    metric=self.METRIC,
+                )
+
+                self.client.create_index(
+                    name=self._index_name,
+                    dimension=self.DIMENSION,
+                    metric=self.METRIC,
+                    spec=ServerlessSpec(
+                        cloud=self.CLOUD,
+                        region=self.REGION,
+                    ),
+                )
+
+                if wait_for_ready:
+                    self._wait_for_index_ready()
+
+                logger.info("pinecone_index_created", index_name=self._index_name)
+            else:
+                logger.info("pinecone_index_exists", index_name=self._index_name)
+
+            # Connect to the index
+            self._index = self.client.Index(self._index_name)
+            logger.info("pinecone_index_connected", index_name=self._index_name)
+
+        except TimeoutError as e:
+            logger.error("pinecone_index_timeout", index_name=self._index_name, error=str(e))
+            raise KnowledgeStoreConnectionError(
+                f"Pinecone index '{self._index_name}' not ready: {e}",
+                {"index_name": self._index_name},
+            )
+        except Exception as e:
+            logger.error(
+                "pinecone_index_setup_failed",
                 index_name=self._index_name,
-                dimension=self.DIMENSION,
-                metric=self.METRIC,
+                error=str(e),
+                error_type=type(e).__name__,
             )
-
-            self.client.create_index(
-                name=self._index_name,
-                dimension=self.DIMENSION,
-                metric=self.METRIC,
-                spec=ServerlessSpec(
-                    cloud=self.CLOUD,
-                    region=self.REGION,
-                ),
+            raise KnowledgeStoreConnectionError(
+                f"Failed to setup Pinecone index '{self._index_name}': {e}",
+                {"index_name": self._index_name, "original_error": str(e)},
             )
-
-            if wait_for_ready:
-                self._wait_for_index_ready()
-
-            logger.info("pinecone_index_created", index_name=self._index_name)
-        else:
-            logger.info("pinecone_index_exists", index_name=self._index_name)
-
-        # Connect to the index
-        self._index = self.client.Index(self._index_name)
-        logger.info("pinecone_index_connected", index_name=self._index_name)
 
     def _wait_for_index_ready(self, timeout: int = 300) -> None:
         """
@@ -189,39 +232,66 @@ class PineconeClient:
 
         Returns:
             Upsert statistics.
+
+        Raises:
+            KnowledgeStoreError: If circuit breaker is open or upsert fails.
         """
+        # Check circuit breaker
+        if not _pinecone_breaker.can_execute():
+            recovery_time = _pinecone_breaker.time_until_recovery()
+            logger.warning("pinecone_circuit_open", recovery_time=recovery_time)
+            raise KnowledgeStoreError(
+                f"Pinecone circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"recovery_time": recovery_time},
+            )
+
         total_upserted = 0
 
-        # Process in batches
-        for i in range(0, len(vectors), batch_size):
-            batch = vectors[i : i + batch_size]
+        try:
+            # Process in batches
+            for i in range(0, len(vectors), batch_size):
+                batch = vectors[i : i + batch_size]
 
-            # Convert to Pinecone format
-            pinecone_vectors = [
-                {
-                    "id": v["id"],
-                    "values": v["values"],
-                    "metadata": v.get("metadata", {}),
-                }
-                for v in batch
-            ]
+                # Convert to Pinecone format
+                pinecone_vectors = [
+                    {
+                        "id": v["id"],
+                        "values": v["values"],
+                        "metadata": v.get("metadata", {}),
+                    }
+                    for v in batch
+                ]
 
-            # Run upsert in thread pool (Pinecone client is sync)
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: self.index.upsert(vectors=pinecone_vectors, namespace=namespace),
+                # Run upsert in thread pool (Pinecone client is sync)
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda pv=pinecone_vectors: self.index.upsert(vectors=pv, namespace=namespace),
+                )
+
+                total_upserted += result.upserted_count
+                logger.debug(
+                    "pinecone_batch_upserted",
+                    batch_size=len(batch),
+                    total=total_upserted,
+                )
+
+            await _pinecone_breaker.record_success()
+            logger.info("pinecone_upsert_completed", total_upserted=total_upserted)
+            return {"upserted_count": total_upserted}
+
+        except Exception as e:
+            await _pinecone_breaker.record_failure()
+            logger.error(
+                "pinecone_upsert_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                vectors_attempted=len(vectors),
             )
-
-            total_upserted += result.upserted_count
-            logger.debug(
-                "pinecone_batch_upserted",
-                batch_size=len(batch),
-                total=total_upserted,
+            raise KnowledgeStoreError(
+                f"Failed to upsert vectors to Pinecone: {e}",
+                {"vectors_attempted": len(vectors), "original_error": str(e)},
             )
-
-        logger.info("pinecone_upsert_completed", total_upserted=total_upserted)
-        return {"upserted_count": total_upserted}
 
     async def query(
         self,
@@ -245,34 +315,62 @@ class PineconeClient:
 
         Returns:
             List of matching records with id, score, and optional metadata/values.
+
+        Raises:
+            KnowledgeStoreError: If circuit breaker is open.
+            KnowledgeStoreQueryError: If query fails.
         """
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: self.index.query(
-                vector=vector,
+        # Check circuit breaker
+        if not _pinecone_breaker.can_execute():
+            recovery_time = _pinecone_breaker.time_until_recovery()
+            logger.warning("pinecone_circuit_open", recovery_time=recovery_time)
+            raise KnowledgeStoreError(
+                f"Pinecone circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"recovery_time": recovery_time},
+            )
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self.index.query(
+                    vector=vector,
+                    top_k=top_k,
+                    filter=filter,
+                    namespace=namespace,
+                    include_metadata=include_metadata,
+                    include_values=include_values,
+                ),
+            )
+
+            matches = []
+            for match in result.matches:
+                record = {
+                    "id": match.id,
+                    "score": match.score,
+                }
+                if include_metadata and match.metadata:
+                    record["metadata"] = dict(match.metadata)
+                if include_values and match.values:
+                    record["values"] = list(match.values)
+                matches.append(record)
+
+            await _pinecone_breaker.record_success()
+            logger.debug("pinecone_query_completed", top_k=top_k, matches=len(matches))
+            return matches
+
+        except Exception as e:
+            await _pinecone_breaker.record_failure()
+            logger.error(
+                "pinecone_query_failed",
+                error=str(e),
+                error_type=type(e).__name__,
                 top_k=top_k,
-                filter=filter,
-                namespace=namespace,
-                include_metadata=include_metadata,
-                include_values=include_values,
-            ),
-        )
-
-        matches = []
-        for match in result.matches:
-            record = {
-                "id": match.id,
-                "score": match.score,
-            }
-            if include_metadata and match.metadata:
-                record["metadata"] = dict(match.metadata)
-            if include_values and match.values:
-                record["values"] = list(match.values)
-            matches.append(record)
-
-        logger.debug("pinecone_query_completed", top_k=top_k, matches=len(matches))
-        return matches
+            )
+            raise KnowledgeStoreQueryError(
+                f"Failed to query Pinecone: {e}",
+                {"top_k": top_k, "original_error": str(e)},
+            )
 
     async def delete(
         self,
@@ -356,7 +454,7 @@ async def test_connection() -> None:
     stats = client.get_stats()
     print(f"[OK] Index stats: {stats['total_vector_count']} vectors, dimension={stats['dimension']}")
 
-    # Create sample vector (3072 dimensions for text-embedding-3-large)
+    # Create sample vector (1024 dimensions for Cohere embed-v3)
     test_id = "test_vector_001"
     sample_vector = [random.random() for _ in range(PineconeClient.DIMENSION)]
 

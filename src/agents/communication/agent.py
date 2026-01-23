@@ -37,12 +37,23 @@ class CommunicationAgent(BaseAgent):
 
         Returns:
             Status of communication.
+
+        Raises:
+            RuntimeError: If agent is not initialized.
+            Exception: Re-raises any execution errors after logging.
         """
+        self._ensure_initialized()
+
         try:
             return await self._execute_core(query)
         except Exception as e:
-            self.logger.error("communication_execution_error", error=str(e))
-            return json.dumps({"error": str(e), "status": "failed"})
+            self.logger.error(
+                "communication_execution_error",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            # Re-raise to fail loudly - caller should handle
+            raise
 
     async def _execute_core(self, query: str) -> str:
         """Core communication logic."""

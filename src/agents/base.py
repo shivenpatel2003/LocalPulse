@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 import structlog
 
+from src.core.exceptions import InitializationError
+
 logger = structlog.get_logger(__name__)
 
 
@@ -55,9 +57,30 @@ class BaseAgent(ABC):
         return self.config.name
 
     async def initialize(self) -> None:
-        """Initialize the agent. Override for custom setup."""
-        self._initialized = True
-        self.logger.info("agent_initialized")
+        """Initialize the agent. Override for custom setup.
+
+        Raises:
+            InitializationError: If initialization fails.
+        """
+        try:
+            await self._do_initialize()
+            self._initialized = True
+            self.logger.info("agent_initialized")
+        except Exception as e:
+            self.logger.error(
+                "agent_initialization_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise InitializationError(
+                self.config.name,
+                f"Failed to initialize agent: {e}",
+                {"agent_id": self.agent_id, "original_error": str(e)},
+            )
+
+    async def _do_initialize(self) -> None:
+        """Override in subclasses for custom initialization logic."""
+        pass
 
     async def shutdown(self) -> None:
         """Shutdown the agent. Override for cleanup."""
@@ -69,6 +92,18 @@ class BaseAgent(ABC):
         self.tools = tools
         self.logger.info("tools_bound", tool_count=len(tools))
 
+    def _ensure_initialized(self) -> None:
+        """Ensure agent is initialized before execution.
+
+        Raises:
+            RuntimeError: If agent is not initialized.
+        """
+        if not self._initialized:
+            self.logger.error("agent_not_initialized", agent_id=self.agent_id)
+            raise RuntimeError(
+                f"Agent '{self.name}' not initialized. Call initialize() first."
+            )
+
     @abstractmethod
     async def execute(self, query: str) -> str:
         """Execute a task and return result.
@@ -78,9 +113,16 @@ class BaseAgent(ABC):
 
         Returns:
             String result of execution.
+
+        Raises:
+            RuntimeError: If agent is not initialized.
         """
         pass
 
     async def _execute_core(self, query: str) -> str:
-        """Core execution logic. Override in subclasses."""
+        """Core execution logic. Override in subclasses.
+
+        Raises:
+            NotImplementedError: If not overridden.
+        """
         raise NotImplementedError("Subclasses must implement _execute_core")

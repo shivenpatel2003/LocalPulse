@@ -472,20 +472,29 @@ class Scheduler:
         )
 
     async def _execute_job(self, job: ScheduledJob) -> None:
-        """Execute the pipeline for a scheduled job."""
+        """
+        Execute the pipeline for a scheduled job.
+
+        Includes timeout protection and proper exception re-raising for APScheduler retry.
+        """
+        settings = get_settings()
+        timeout_seconds = settings.pipeline_timeout_seconds
+
         logger.info(
             "job_execution_start",
             client_id=str(job.client_id),
             business_name=job.business_name,
+            timeout_seconds=timeout_seconds,
         )
 
         try:
-            # Run the full pipeline
-            result = await run_full_pipeline(
-                business_name=job.business_name,
-                location=job.location,
-                owner_email=job.owner_email,
-            )
+            # Run the full pipeline with timeout protection
+            async with asyncio.timeout(timeout_seconds):
+                result = await run_full_pipeline(
+                    business_name=job.business_name,
+                    location=job.location,
+                    owner_email=job.owner_email,
+                )
 
             # Update last_run and next_run in Supabase
             now = datetime.now(timezone.utc)
@@ -502,13 +511,26 @@ class Scheduler:
                 next_run=job.next_run.isoformat(),
             )
 
+        except asyncio.TimeoutError:
+            logger.error(
+                "job_execution_timeout",
+                client_id=str(job.client_id),
+                business_name=job.business_name,
+                timeout_seconds=timeout_seconds,
+            )
+            # Re-raise so APScheduler knows job failed and can retry
+            raise
+
         except Exception as e:
             logger.error(
                 "job_execution_failed",
                 client_id=str(job.client_id),
                 business_name=job.business_name,
                 error=str(e),
+                error_type=type(e).__name__,
             )
+            # Re-raise so APScheduler knows job failed and can retry per policy
+            raise
 
     async def _update_job_run_times(self, job: ScheduledJob) -> None:
         """Update last_run and next_run in Supabase."""

@@ -71,17 +71,25 @@ Focus on actionable intelligence that helps businesses compete effectively."""
 
         Returns:
             JSON string with research results and provenance.
+
+        Raises:
+            RuntimeError: If agent is not initialized.
+            Exception: Re-raises any execution errors after logging.
         """
+        self._ensure_initialized()
+
         try:
             result = await self._execute_core(query)
             return result
         except Exception as e:
-            self.logger.error("research_execution_error", error=str(e))
-            return json.dumps({
-                "error": str(e),
-                "query": query,
-                "source": "research_agent",
-            })
+            self.logger.error(
+                "research_execution_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                query=query[:100],
+            )
+            # Re-raise to fail loudly - caller should handle
+            raise
 
     async def _execute_core(self, query: str) -> str:
         """Core execution logic for research queries.

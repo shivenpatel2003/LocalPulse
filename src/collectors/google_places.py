@@ -12,6 +12,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 import httpx
+import structlog
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -20,7 +21,21 @@ from tenacity import (
 )
 
 from src.config.settings import get_settings
+from src.core.circuit_breaker import get_circuit_breaker
+from src.core.exceptions import (
+    CollectorAuthError,
+    CollectorError,
+    CollectorNotFoundError,
+    CollectorRateLimitError,
+    CollectorTimeoutError,
+    CollectorUnavailableError,
+)
 from src.models.schemas import Business, Platform, PriceRange, Review
+
+logger = structlog.get_logger(__name__)
+
+# Circuit breaker for Google Places API
+_google_places_breaker = get_circuit_breaker("google_places", failure_threshold=5, recovery_timeout=60)
 
 
 # =============================================================================
@@ -195,7 +210,7 @@ class GooglePlacesCollector:
         self._request_times.append(now)
 
     @retry(
-        retry=retry_if_exception_type(GooglePlacesRateLimitError),
+        retry=retry_if_exception_type((GooglePlacesRateLimitError, CollectorRateLimitError)),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
@@ -207,7 +222,7 @@ class GooglePlacesCollector:
         json_data: Optional[dict] = None,
         field_mask: Optional[list[str]] = None,
     ) -> dict[str, Any]:
-        """Make an API request with rate limiting and retries.
+        """Make an API request with rate limiting, circuit breaker, and retries.
 
         Args:
             method: HTTP method (GET, POST).
@@ -219,11 +234,26 @@ class GooglePlacesCollector:
             Parsed JSON response.
 
         Raises:
-            GooglePlacesError: On API errors.
-            GooglePlacesRateLimitError: When rate limited.
-            GooglePlacesAuthError: On authentication failure.
-            GooglePlacesNotFoundError: When resource not found.
+            CollectorUnavailableError: When circuit breaker is open.
+            CollectorRateLimitError: When rate limited.
+            CollectorAuthError: On authentication failure.
+            CollectorNotFoundError: When resource not found.
+            CollectorError: On other API errors.
         """
+        # Check circuit breaker first
+        if not _google_places_breaker.can_execute():
+            recovery_time = _google_places_breaker.time_until_recovery()
+            logger.warning(
+                "google_places_circuit_open",
+                recovery_time=recovery_time,
+                endpoint=endpoint,
+            )
+            raise CollectorUnavailableError(
+                "google_places",
+                f"Circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"endpoint": endpoint, "recovery_time": recovery_time},
+            )
+
         await self._rate_limit()
         client = await self._ensure_client()
 
@@ -241,25 +271,70 @@ class GooglePlacesCollector:
 
             # Handle specific error codes
             if response.status_code == 429:
-                raise GooglePlacesRateLimitError("Rate limited by Google Places API")
+                await _google_places_breaker.record_failure()
+                logger.warning("google_places_rate_limited", endpoint=endpoint)
+                raise CollectorRateLimitError(
+                    "google_places",
+                    "Rate limited by Google Places API",
+                    {"endpoint": endpoint},
+                )
             elif response.status_code == 401:
-                raise GooglePlacesAuthError("Invalid API key")
+                await _google_places_breaker.record_failure()
+                raise CollectorAuthError(
+                    "google_places",
+                    "Invalid API key",
+                    {"endpoint": endpoint},
+                )
             elif response.status_code == 403:
-                raise GooglePlacesAuthError("API key not authorized for Places API")
+                await _google_places_breaker.record_failure()
+                raise CollectorAuthError(
+                    "google_places",
+                    "API key not authorized for Places API",
+                    {"endpoint": endpoint},
+                )
             elif response.status_code == 404:
-                raise GooglePlacesNotFoundError(f"Resource not found: {endpoint}")
+                # 404 is not a circuit breaker failure - it's expected for missing resources
+                raise CollectorNotFoundError(
+                    "google_places",
+                    f"Resource not found: {endpoint}",
+                    {"endpoint": endpoint},
+                )
             elif response.status_code >= 400:
+                await _google_places_breaker.record_failure()
                 error_data = response.json() if response.content else {}
-                raise GooglePlacesError(
-                    f"API error {response.status_code}: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                error_msg = error_data.get('error', {}).get('message', 'Unknown error')
+                logger.error(
+                    "google_places_api_error",
+                    status_code=response.status_code,
+                    error=error_msg,
+                    endpoint=endpoint,
+                )
+                raise CollectorError(
+                    "google_places",
+                    f"API error {response.status_code}: {error_msg}",
+                    {"endpoint": endpoint, "status_code": response.status_code},
                 )
 
+            # Success - record it
+            await _google_places_breaker.record_success()
             return response.json() if response.content else {}
 
         except httpx.TimeoutException as e:
-            raise GooglePlacesError(f"Request timeout: {e}")
+            await _google_places_breaker.record_failure()
+            logger.error("google_places_timeout", endpoint=endpoint, error=str(e))
+            raise CollectorTimeoutError(
+                "google_places",
+                f"Request timeout: {e}",
+                {"endpoint": endpoint},
+            )
         except httpx.RequestError as e:
-            raise GooglePlacesError(f"Request failed: {e}")
+            await _google_places_breaker.record_failure()
+            logger.error("google_places_request_error", endpoint=endpoint, error=str(e))
+            raise CollectorError(
+                "google_places",
+                f"Request failed: {e}",
+                {"endpoint": endpoint, "original_error": str(e)},
+            )
 
     # -------------------------------------------------------------------------
     # Public API Methods

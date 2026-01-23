@@ -21,11 +21,12 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 import structlog
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.dependencies import set_scheduler, reset_dependencies
 from src.api.models import ErrorResponse, ValidationErrorResponse, ValidationErrorDetail
@@ -64,20 +65,63 @@ track competitor activity, and receive actionable insights to improve their busi
 
 ### Authentication
 
-Currently, the API does not require authentication. In production, implement
-API key or OAuth2 authentication.
+API key authentication is available. Set `API_KEY_ENABLED=true` and `API_KEY=your-secret-key`
+in environment to require X-API-Key header on all requests.
 """
 API_VERSION = "1.0.0"
 
-# CORS configuration
-CORS_ORIGINS = [
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:8000",
-]
+
+# =============================================================================
+# API Key Authentication Middleware
+# =============================================================================
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to validate API key for all requests except health/docs endpoints.
+
+    Enable by setting API_KEY_ENABLED=true and API_KEY=<secret> in environment.
+    """
+
+    # Endpoints that don't require authentication
+    PUBLIC_PATHS = {"/", "/health", "/health/live", "/health/ready", "/docs", "/redoc", "/openapi.json"}
+
+    async def dispatch(self, request: Request, call_next):
+        settings = get_settings()
+
+        # Skip auth if disabled
+        if not settings.api_key_enabled:
+            return await call_next(request)
+
+        # Skip auth for public paths
+        if request.url.path in self.PUBLIC_PATHS:
+            return await call_next(request)
+
+        # Validate API key
+        api_key = request.headers.get("X-API-Key")
+        expected_key = settings.api_key.get_secret_value() if settings.api_key else None
+
+        if not expected_key:
+            logger.error("api_key_enabled_but_not_set")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"error": "Server misconfiguration: API key authentication enabled but no key configured"},
+            )
+
+        if not api_key:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"error": "Missing X-API-Key header"},
+            )
+
+        if api_key != expected_key:
+            logger.warning("invalid_api_key_attempt", path=request.url.path)
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"error": "Invalid API key"},
+            )
+
+        return await call_next(request)
 
 
 @asynccontextmanager
@@ -155,14 +199,18 @@ app = FastAPI(
     ],
 )
 
-# Configure CORS middleware
+# Configure CORS middleware (from settings)
+_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_settings.cors_allowed_origins,
+    allow_credentials=_settings.cors_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "Accept"],
 )
+
+# Add API Key authentication middleware
+app.add_middleware(APIKeyMiddleware)
 
 
 # =============================================================================

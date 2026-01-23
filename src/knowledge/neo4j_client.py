@@ -13,11 +13,20 @@ from typing import Any
 
 import structlog
 from neo4j import AsyncGraphDatabase, AsyncDriver, AsyncSession
-from neo4j.exceptions import ServiceUnavailable, AuthError
+from neo4j.exceptions import ServiceUnavailable, AuthError, Neo4jError
 
 from src.config import settings
+from src.core.circuit_breaker import get_circuit_breaker
+from src.core.exceptions import (
+    KnowledgeStoreConnectionError,
+    KnowledgeStoreError,
+    KnowledgeStoreQueryError,
+)
 
 logger = structlog.get_logger(__name__)
+
+# Circuit breaker for Neo4j operations
+_neo4j_breaker = get_circuit_breaker("neo4j", failure_threshold=5, recovery_timeout=60)
 
 
 class Neo4jClient:
@@ -48,8 +57,15 @@ class Neo4jClient:
         self._password = password or settings.neo4j_password.get_secret_value()
         self._driver: AsyncDriver | None = None
 
-    async def connect(self) -> None:
-        """Establish connection to Neo4j database."""
+    async def connect(self, auto_init_schema: bool = True) -> None:
+        """Establish connection to Neo4j database.
+
+        Args:
+            auto_init_schema: Initialize schema (constraints/indexes) on first connect.
+
+        Raises:
+            KnowledgeStoreConnectionError: If connection fails.
+        """
         if self._driver is not None:
             return
 
@@ -61,12 +77,72 @@ class Neo4jClient:
             # Verify connectivity
             await self._driver.verify_connectivity()
             logger.info("neo4j_connected", uri=self._uri)
+
+            # Auto-initialize schema on first connect
+            if auto_init_schema:
+                await self._initialize_schema()
+
         except AuthError as e:
-            logger.error("neo4j_auth_failed", error=str(e))
-            raise
+            logger.error("neo4j_auth_failed", error=str(e), uri=self._uri)
+            raise KnowledgeStoreConnectionError(
+                f"Neo4j authentication failed: {e}",
+                {"uri": self._uri, "original_error": str(e)},
+            )
         except ServiceUnavailable as e:
-            logger.error("neo4j_unavailable", error=str(e))
+            logger.error("neo4j_unavailable", error=str(e), uri=self._uri)
+            raise KnowledgeStoreConnectionError(
+                f"Neo4j service unavailable: {e}",
+                {"uri": self._uri, "original_error": str(e)},
+            )
+        except KnowledgeStoreConnectionError:
             raise
+        except Exception as e:
+            logger.error(
+                "neo4j_connection_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                uri=self._uri,
+            )
+            raise KnowledgeStoreConnectionError(
+                f"Failed to connect to Neo4j: {e}",
+                {"uri": self._uri, "original_error": str(e)},
+            )
+
+    async def _initialize_schema(self) -> None:
+        """Initialize schema with constraints and indexes.
+
+        Creates the required schema if not already present.
+        Safe to call multiple times - constraints use IF NOT EXISTS.
+        """
+        logger.info("neo4j_schema_auto_init_starting")
+
+        statements = [
+            stmt.strip()
+            for stmt in SCHEMA_CONSTRAINTS.strip().split(";")
+            if stmt.strip() and not stmt.strip().startswith("//")
+        ]
+
+        initialized_count = 0
+        for statement in statements:
+            if statement:
+                try:
+                    # Use direct session to avoid circuit breaker during init
+                    async with self._driver.session(database="neo4j") as session:
+                        await session.run(statement)
+                    initialized_count += 1
+                except Exception as e:
+                    # Constraints may already exist, log and continue
+                    logger.debug(
+                        "neo4j_schema_item_skipped",
+                        statement=statement[:50],
+                        reason=str(e),
+                    )
+
+        logger.info(
+            "neo4j_schema_auto_init_complete",
+            total_statements=len(statements),
+            initialized=initialized_count,
+        )
 
     async def close(self) -> None:
         """Close the Neo4j driver connection."""
@@ -107,12 +183,59 @@ class Neo4jClient:
 
         Returns:
             List of records as dictionaries.
+
+        Raises:
+            KnowledgeStoreError: If circuit breaker is open.
+            KnowledgeStoreQueryError: If query fails.
         """
-        async with self.driver.session(database=database) as session:
-            result = await session.run(query, parameters or {})
-            records = await result.data()
-            logger.debug("neo4j_query_executed", query=query[:100], record_count=len(records))
-            return records
+        # Check circuit breaker
+        if not _neo4j_breaker.can_execute():
+            recovery_time = _neo4j_breaker.time_until_recovery()
+            logger.warning("neo4j_circuit_open", recovery_time=recovery_time)
+            raise KnowledgeStoreError(
+                f"Neo4j circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"recovery_time": recovery_time},
+            )
+
+        try:
+            async with self.driver.session(database=database) as session:
+                result = await session.run(query, parameters or {})
+                records = await result.data()
+                await _neo4j_breaker.record_success()
+                logger.debug("neo4j_query_executed", query=query[:100], record_count=len(records))
+                return records
+
+        except ServiceUnavailable as e:
+            await _neo4j_breaker.record_failure()
+            logger.error("neo4j_service_unavailable", query=query[:100], error=str(e))
+            raise KnowledgeStoreQueryError(
+                f"Neo4j service unavailable: {e}",
+                {"query": query[:100], "original_error": str(e)},
+            )
+        except Neo4jError as e:
+            await _neo4j_breaker.record_failure()
+            logger.error(
+                "neo4j_query_failed",
+                query=query[:100],
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise KnowledgeStoreQueryError(
+                f"Neo4j query failed: {e}",
+                {"query": query[:100], "original_error": str(e)},
+            )
+        except Exception as e:
+            await _neo4j_breaker.record_failure()
+            logger.error(
+                "neo4j_query_error",
+                query=query[:100],
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise KnowledgeStoreQueryError(
+                f"Failed to execute Neo4j query: {e}",
+                {"query": query[:100], "original_error": str(e)},
+            )
 
     async def run_write_query(
         self,
@@ -130,15 +253,62 @@ class Neo4jClient:
 
         Returns:
             List of records as dictionaries.
+
+        Raises:
+            KnowledgeStoreError: If circuit breaker is open.
+            KnowledgeStoreQueryError: If query fails.
         """
+        # Check circuit breaker
+        if not _neo4j_breaker.can_execute():
+            recovery_time = _neo4j_breaker.time_until_recovery()
+            logger.warning("neo4j_circuit_open", recovery_time=recovery_time)
+            raise KnowledgeStoreError(
+                f"Neo4j circuit breaker open. Recovery in {recovery_time:.1f}s",
+                {"recovery_time": recovery_time},
+            )
+
         async def _write_tx(tx: AsyncSession) -> list[dict[str, Any]]:
             result = await tx.run(query, parameters or {})
             return await result.data()
 
-        async with self.driver.session(database=database) as session:
-            records = await session.execute_write(lambda tx: _write_tx(tx))
-            logger.debug("neo4j_write_executed", query=query[:100], record_count=len(records))
-            return records
+        try:
+            async with self.driver.session(database=database) as session:
+                records = await session.execute_write(lambda tx: _write_tx(tx))
+                await _neo4j_breaker.record_success()
+                logger.debug("neo4j_write_executed", query=query[:100], record_count=len(records))
+                return records
+
+        except ServiceUnavailable as e:
+            await _neo4j_breaker.record_failure()
+            logger.error("neo4j_write_unavailable", query=query[:100], error=str(e))
+            raise KnowledgeStoreQueryError(
+                f"Neo4j service unavailable during write: {e}",
+                {"query": query[:100], "original_error": str(e)},
+            )
+        except Neo4jError as e:
+            await _neo4j_breaker.record_failure()
+            logger.error(
+                "neo4j_write_failed",
+                query=query[:100],
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise KnowledgeStoreQueryError(
+                f"Neo4j write query failed: {e}",
+                {"query": query[:100], "original_error": str(e)},
+            )
+        except Exception as e:
+            await _neo4j_breaker.record_failure()
+            logger.error(
+                "neo4j_write_error",
+                query=query[:100],
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise KnowledgeStoreQueryError(
+                f"Failed to execute Neo4j write: {e}",
+                {"query": query[:100], "original_error": str(e)},
+            )
 
 
 # =============================================================================
