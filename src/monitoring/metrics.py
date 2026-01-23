@@ -2,21 +2,27 @@
 Prometheus metrics for LocalPulse observability.
 
 Provides standardized metrics for monitoring system performance,
-health, and resource usage.
+health, and resource usage, with error persistence integration.
 
 Usage:
-    from src.monitoring.metrics import track_agent_execution
+    from src.monitoring.metrics import track_agent_execution, record_error
 
     with track_agent_execution("research"):
         await agent.execute(query)
+
+    # Record errors (increments Prometheus AND persists to Redis)
+    await record_error("ValidationError", "/api/collect", "Invalid input")
 
     # Or manually
     AGENT_EXECUTION_DURATION.labels(agent="research").observe(duration)
 """
 
+import logging
 import time
 from contextlib import contextmanager
-from typing import Generator
+from typing import Any, Generator, Optional
+
+import structlog
 
 from prometheus_client import (
     Counter,
@@ -102,6 +108,23 @@ COLLECTOR_LATENCY = Histogram(
     ["collector", "operation"],
     buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0],
 )
+
+# Error metrics
+ERROR_COUNT = Counter(
+    "localpulse_errors_total",
+    "Total errors by type and endpoint",
+    ["error_type", "endpoint"],
+)
+
+# Rate limit metrics
+RATE_LIMIT_HITS = Counter(
+    "localpulse_rate_limit_hits_total",
+    "Total rate limit hits by API",
+    ["api_name"],
+)
+
+
+logger = structlog.get_logger(__name__)
 
 
 # =============================================================================
@@ -242,6 +265,66 @@ def update_circuit_breaker_state(service: str, state: str) -> None:
 def record_circuit_breaker_failure(service: str) -> None:
     """Record a circuit breaker failure."""
     CIRCUIT_BREAKER_FAILURES.labels(service=service).inc()
+
+
+async def record_error(
+    error_type: str,
+    endpoint: str,
+    message: str = "",
+    context: Optional[dict[str, Any]] = None,
+    persist: bool = True,
+) -> None:
+    """Record an error to both Prometheus and persistent storage.
+
+    This function increments the Prometheus error counter AND persists
+    the error to Redis (or in-memory fallback) for failure pattern analysis.
+
+    Args:
+        error_type: Error classification (e.g., "ValidationError", "RateLimitExceeded")
+        endpoint: API endpoint where error occurred
+        message: Error message
+        context: Additional context for analysis
+        persist: Whether to persist to Redis storage (default True)
+
+    Usage:
+        await record_error(
+            error_type="ValidationError",
+            endpoint="/api/collect",
+            message="Invalid client_id format",
+            context={"client_id": "abc"}
+        )
+    """
+    # Increment Prometheus counter
+    ERROR_COUNT.labels(error_type=error_type, endpoint=endpoint).inc()
+
+    # Persist to Redis for pattern analysis
+    if persist:
+        try:
+            from src.monitoring.error_metrics import get_error_metrics_store
+
+            store = get_error_metrics_store()
+            await store.record_error(
+                error_type=error_type,
+                endpoint=endpoint,
+                message=message,
+                context=context,
+            )
+        except Exception as e:
+            logger.warning(
+                "error_metrics_persistence_failed",
+                error=str(e),
+                error_type=error_type,
+                endpoint=endpoint,
+            )
+
+
+def record_rate_limit_hit(api_name: str) -> None:
+    """Record a rate limit hit for an API.
+
+    Args:
+        api_name: Name of the rate-limited API (e.g., "google_places", "instagram")
+    """
+    RATE_LIMIT_HITS.labels(api_name=api_name).inc()
 
 
 # =============================================================================
