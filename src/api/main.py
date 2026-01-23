@@ -16,9 +16,10 @@ Usage:
     python -m src.api.main
 """
 
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import structlog
 from fastapi import FastAPI, Request, status, HTTPException
@@ -29,6 +30,7 @@ from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.dependencies import set_scheduler, reset_dependencies
+from src.api.middleware import RateLimitMiddleware
 from src.api.models import ErrorResponse, ValidationErrorResponse, ValidationErrorDetail
 from src.api.routes.health import router as health_router, set_server_start_time
 from src.api.routes.clients import router as clients_router
@@ -130,8 +132,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Application lifespan manager.
 
     Handles startup and shutdown events:
-    - Startup: Initialize database connections, start scheduler
-    - Shutdown: Stop scheduler, cleanup resources
+    - Startup: Initialize database connections, start scheduler, enable hot reload
+    - Shutdown: Stop scheduler, stop config watcher, cleanup resources
     """
     # Startup
     logger.info("application_starting")
@@ -148,12 +150,34 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Continue without scheduler - manual runs will still work
         set_scheduler(scheduler)
 
+    # Start hot reload watcher in development mode
+    config_watcher = None
+    settings = get_settings()
+    if settings.is_development:
+        try:
+            from src.config.hot_reload import start_config_watcher
+            config_watcher = await start_config_watcher()
+            if config_watcher:
+                logger.info("hot_reload_enabled", mode="development")
+        except ImportError:
+            logger.debug("hot_reload_not_available", reason="watchfiles not installed")
+        except Exception as e:
+            logger.warning("hot_reload_init_failed", error=str(e))
+
     logger.info("application_started")
 
     yield
 
     # Shutdown
     logger.info("application_stopping")
+
+    # Stop config watcher
+    if config_watcher:
+        try:
+            await config_watcher.stop()
+            logger.info("config_watcher_stopped")
+        except Exception as e:
+            logger.error("config_watcher_shutdown_error", error=str(e))
 
     try:
         if scheduler.is_running:
@@ -211,6 +235,9 @@ app.add_middleware(
 
 # Add API Key authentication middleware
 app.add_middleware(APIKeyMiddleware)
+
+# Add rate limiting middleware
+app.add_middleware(RateLimitMiddleware)
 
 
 # =============================================================================
