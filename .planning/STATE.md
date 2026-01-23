@@ -77,7 +77,7 @@ See: CLAUDE.md (project context)
 |------|----------|--------|-------------|
 | 17-01 | HIGH | Complete | VCR.py Integration Test Infrastructure |
 | 17-02 | HIGH | Complete | Integration Tests for Critical Paths (25 tests) |
-| 17-03 | MEDIUM | Pending | Redis Rate Limiting |
+| 17-03 | MEDIUM | Complete | Redis Rate Limiting |
 | 17-04 | MEDIUM | Complete | Load Testing Infrastructure |
 | 17-05 | MEDIUM | Complete | Hot-Reload Configuration |
 
@@ -104,6 +104,7 @@ See: CLAUDE.md (project context)
 | 2026-01-23 | Switched to Cohere embeddings | Free tier, 1024D vectors |
 | 2026-01-23 | Phase 16 planned | 5 plans from audit findings |
 | 2026-01-23 | Phase 17 Plan 02 executed | 25 integration tests for collection/analysis/report pipelines |
+| 2026-01-23 | Phase 17 Plan 03 executed | Redis rate limiter with sliding window algorithm |
 
 ## Accumulated Decisions
 
@@ -113,12 +114,15 @@ See: CLAUDE.md (project context)
 | 2026-01-19 | clean_registry fixture pattern | Singleton reset for isolated tests |
 | 2026-01-23 | Use Cohere embeddings | Free tier, replaces OpenAI quota issues |
 | 2026-01-23 | Pinecone 1024D index | Match Cohere embed-v3 dimensions |
+| 2026-01-23 | redis.asyncio over aioredis | aioredis deprecated, redis>=4.2 has native async |
+| 2026-01-23 | Sliding window rate limiting | Accurate counting with Redis sorted sets |
+| 2026-01-23 | Factory fallback pattern | Auto-select Redis or in-memory based on availability |
 
 ## Session Continuity
 
-Last session: 2026-01-23T22:36:19Z
-Stopped at: Completed 17-02-PLAN.md (Integration Tests for Critical Paths)
-Resume file: .planning/phases/17-10-10-excellence/17-02-SUMMARY.md
+Last session: 2026-01-23T22:37:05Z
+Stopped at: Completed 17-03-PLAN.md (Redis Rate Limiting)
+Resume file: .planning/phases/17-10-10-excellence/17-03-SUMMARY.md
 
 ---
 *State file maintained by GSD workflow*
