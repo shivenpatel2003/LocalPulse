@@ -13,6 +13,9 @@ This module provides common fixtures for all tests:
 - sample_analysis_result: Sample analysis result
 - sample_report_content: Sample report content
 - mock_llm_response: Mock LLM response factory
+- mock_settings: Settings with test values (no real API keys needed)
+- mock_container: Fully mocked DependencyContainer
+- async_http_client: Async HTTP client for API testing
 """
 
 import pytest
@@ -20,6 +23,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import json
 
 from src.orchestration.discovery import AgentRegistry
+
+# Enable pytest-asyncio
+pytest_plugins = ["pytest_asyncio"]
 
 
 @pytest.fixture
@@ -171,3 +177,44 @@ def mock_llm_response():
         return AIMessage(content=content)
 
     return create_response
+
+
+@pytest.fixture
+def mock_settings():
+    """Settings with test values - no real API keys needed."""
+    from unittest.mock import MagicMock
+
+    settings = MagicMock()
+    settings.neo4j_uri = "bolt://localhost:7687"
+    settings.neo4j_user = "neo4j"
+    settings.neo4j_password.get_secret_value.return_value = "test"
+    settings.pinecone_api_key.get_secret_value.return_value = "test-key"
+    settings.pinecone_index_name = "test-index"
+    settings.cohere_api_key.get_secret_value.return_value = "test-key"
+    settings.redis_url = "redis://localhost:6379"
+    settings.app_env = "development"
+    settings.debug = True
+    return settings
+
+
+@pytest.fixture
+def mock_container(mock_settings, mock_neo4j, mock_pinecone, mock_embedding_service):
+    """Fully mocked DependencyContainer for unit tests."""
+    from unittest.mock import MagicMock
+
+    container = MagicMock()
+    container.settings = mock_settings
+    container.neo4j = mock_neo4j
+    container.pinecone = mock_pinecone
+    container.embeddings = mock_embedding_service
+    container.is_initialized = True
+    return container
+
+
+@pytest.fixture
+async def async_http_client():
+    """Async HTTP client for API testing."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        yield client
