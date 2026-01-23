@@ -27,7 +27,7 @@ from src.collectors.google_places import (
     GooglePlacesNotFoundError,
 )
 from src.graphs.state import CollectionState, CollectionStatus, create_collection_state
-from src.knowledge.embeddings import EmbeddingsService
+from src.knowledge import EmbeddingsService  # Uses Cohere (free tier)
 from src.knowledge.neo4j_client import Neo4jClient
 from src.knowledge.pinecone_client import PineconeClient
 
