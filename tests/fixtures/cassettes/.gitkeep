@@ -1,0 +1,2 @@
+# This directory stores VCR cassettes (recorded HTTP interactions)
+# Cassettes are YAML files that replay API responses for deterministic tests
