@@ -203,6 +203,10 @@ def get_settings() -> Settings:
 
     Uses lru_cache to ensure settings are only loaded once.
     Call get_settings.cache_clear() to reload settings if needed.
+
+    For automatic reloading in development, use the ConfigWatcher:
+        from src.config.hot_reload import start_config_watcher
+        await start_config_watcher()
     """
     return Settings()
 

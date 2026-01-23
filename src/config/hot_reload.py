@@ -70,7 +70,8 @@ class ConfigWatcher:
             callback: Function to call when config changes
         """
         self.callbacks.append(callback)
-        logger.debug("config_watcher_callback_added", callback=callback.__name__)
+        callback_name = getattr(callback, "__name__", repr(callback))
+        logger.debug("config_watcher_callback_added", callback=callback_name)
 
     def remove_callback(self, callback: Callable[[], None]) -> None:
         """Remove a previously registered callback."""
@@ -104,9 +105,10 @@ class ConfigWatcher:
                 try:
                     callback()
                 except Exception as e:
+                    callback_name = getattr(callback, "__name__", repr(callback))
                     logger.error(
                         "config_reload_callback_error",
-                        callback=callback.__name__,
+                        callback=callback_name,
                         error=str(e),
                     )
 
