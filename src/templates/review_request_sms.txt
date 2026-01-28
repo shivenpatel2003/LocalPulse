@@ -1,0 +1,1 @@
+{{ greeting }} {{ customer_name }}, thanks for visiting {{ business_name }}! {{ ask_line }} {{ review_url }}

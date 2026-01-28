@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>We'd Love Your Feedback</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, Helvetica, sans-serif; }
+    .container { max-width: 560px; margin: 24px auto; background: #ffffff; border-radius: 8px; overflow: hidden; }
+    .header { background-color: {{ header_colour }}; padding: 24px; text-align: center; color: #ffffff; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .body { padding: 28px 24px; color: #333333; line-height: 1.6; font-size: 15px; }
+    .cta { text-align: center; padding: 8px 0 28px; }
+    .cta a {
+      display: inline-block; padding: 14px 32px; background-color: {{ header_colour }};
+      color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px;
+    }
+    .footer { padding: 16px 24px; text-align: center; font-size: 12px; color: #999999; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>{{ business_name }}</h1>
+    </div>
+    <div class="body">
+      <p>{{ greeting }} {{ customer_name }},</p>
+      <p>{{ opening_line }}</p>
+      <p>{{ ask_line }}</p>
+      <div class="cta">
+        <a href="{{ review_url }}">Leave a Review</a>
+      </div>
+      <p>{{ closing_line }}</p>
+      <p>{{ sign_off }}<br>The {{ business_name }} Team</p>
+    </div>
+    <div class="footer">
+      <p>You received this because you recently visited {{ business_name }}.</p>
+    </div>
+  </div>
+</body>
+</html>
