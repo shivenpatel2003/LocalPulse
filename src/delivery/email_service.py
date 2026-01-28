@@ -102,7 +102,7 @@ WELCOME_EMAIL_TEMPLATE = """
         <tr>
             <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px 30px; text-align: center;">
                 <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">LocalPulse</h1>
-                <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">AI-Powered Restaurant Intelligence</p>
+                <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">AI-Powered Business Intelligence</p>
             </td>
         </tr>
 
@@ -309,7 +309,7 @@ Your first report will arrive {{ first_report_info }}.
 Have questions? Contact us at support@localpulse.io
 
 ---
-LocalPulse - AI-Powered Restaurant Intelligence
+LocalPulse - AI-Powered Business Intelligence
 """
 
 

@@ -772,7 +772,7 @@ HTML_REPORT_TEMPLATE = """
         <!-- Footer -->
         <div class="footer">
             <div class="footer-logo">LocalPulse</div>
-            <div class="footer-text">AI-Powered Restaurant Intelligence</div>
+            <div class="footer-text">AI-Powered Business Intelligence</div>
             <div class="footer-links">
                 Generated on {{ generated_at }} | Questions? Reply to this email
             </div>
