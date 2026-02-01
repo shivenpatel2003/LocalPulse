@@ -54,6 +54,7 @@ watchfiles = "^1.0"
 # Redis (async client with hiredis for performance)
 redis = {extras = ["hiredis"], version = "^5.0"}
 stripe = "^14.3.0"
+google-generativeai = "^0.8.6"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"

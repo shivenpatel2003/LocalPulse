@@ -1,9 +1,13 @@
 """
 Review Response Generator.
 
-Uses Claude to generate personalized, professional responses to customer
-reviews. Adapts tone to business type and handles negative reviews with
-empathy and resolution offers.
+Uses Gemini Flash (primary) or Claude (fallback) to generate personalized,
+professional responses to customer reviews. Adapts tone to business type
+and handles negative reviews with empathy and resolution offers.
+
+Backend selection:
+- If GOOGLE_API_KEY is set → uses Gemini 2.0 Flash (free tier: 1,500 req/day)
+- Otherwise falls back to Anthropic Claude
 
 Standalone usage:
     from src.services.response_generator import ReviewResponseGenerator, ReviewInput
@@ -23,11 +27,13 @@ import re
 from enum import Enum
 from typing import Optional
 
-import anthropic
+import structlog
 from pydantic import BaseModel, Field
 
 from src.config.industry_schema import IndustryConfig
 from src.config.settings import get_settings
+
+logger = structlog.get_logger(__name__)
 
 
 # =============================================================================
@@ -145,17 +151,34 @@ Return ONLY the JSON object. No markdown, no explanation."""
 
 class ReviewResponseGenerator:
     """
-    Generates personalised review responses using Claude.
+    Generates personalised review responses using Gemini Flash or Claude.
 
-    Follows the same Anthropic client pattern as ConfigGenerator.
+    Uses Gemini 2.0 Flash when GOOGLE_API_KEY is configured, otherwise
+    falls back to Anthropic Claude.
     """
 
-    def __init__(self, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, model: str | None = None):
         settings = get_settings()
-        self.client = anthropic.Anthropic(
-            api_key=settings.anthropic_api_key.get_secret_value()
-        )
-        self.model = model
+        self._use_gemini = False
+
+        if settings.google_api_key:
+            import google.generativeai as genai
+
+            genai.configure(api_key=settings.google_api_key.get_secret_value())
+            self.gemini_model = genai.GenerativeModel(
+                model_name=model or "gemini-2.0-flash",
+                system_instruction=SYSTEM_PROMPT,
+            )
+            self._use_gemini = True
+            logger.info("response_generator_using_gemini", model=model or "gemini-2.0-flash")
+        else:
+            import anthropic
+
+            self.client = anthropic.Anthropic(
+                api_key=settings.anthropic_api_key.get_secret_value()
+            )
+            self.model = model or "claude-3-haiku-20240307"
+            logger.info("response_generator_using_anthropic", model=self.model)
 
     def _resolve_tone(self, review: ReviewInput) -> ResponseTone:
         """Determine the appropriate tone for a business type."""
@@ -237,13 +260,19 @@ class ReviewResponseGenerator:
         strategy = self._determine_strategy(review.rating)
         user_message = self._build_user_message(review, tone, strategy)
 
-        raw = self.client.messages.create(
-            model=self.model,
-            max_tokens=512,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        result = self._parse_response(raw.content[0].text)
+        if self._use_gemini:
+            raw = self.gemini_model.generate_content(user_message)
+            raw_text = raw.text
+        else:
+            raw = self.client.messages.create(
+                model=self.model,
+                max_tokens=512,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            raw_text = raw.content[0].text
+
+        result = self._parse_response(raw_text)
 
         response_text = result["response_text"]
         return ReviewResponse(

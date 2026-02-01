@@ -83,6 +83,13 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Google (Gemini AI)
+    # -------------------------------------------------------------------------
+    google_api_key: SecretStr | None = Field(
+        default=None, description="Google API key for Gemini"
+    )
+
+    # -------------------------------------------------------------------------
     # Redis (Caching / Working Memory)
     # -------------------------------------------------------------------------
     redis_url: str | None = Field(default=None, description="Redis connection URL")

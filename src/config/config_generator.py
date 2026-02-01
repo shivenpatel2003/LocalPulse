@@ -1,12 +1,17 @@
 """
 AI-Powered Configuration Generator.
 
-This module uses Claude to intelligently generate complete IndustryConfig
-objects from natural language descriptions. It supports:
+This module uses Gemini Flash (primary) or Claude (fallback) to intelligently
+generate complete IndustryConfig objects from natural language descriptions.
+It supports:
 - Initial config generation from business description
 - Iterative refinement through conversation
 - Smart defaults based on detected patterns
 - Reasoning explanations for all choices
+
+Backend selection:
+- If GOOGLE_API_KEY is set → uses Gemini 2.0 Flash
+- Otherwise falls back to Anthropic Claude
 
 The generator produces production-ready configurations that work with
 the entire LocalPulse pipeline.
@@ -20,7 +25,7 @@ from enum import Enum
 from typing import Any, Optional
 from uuid import uuid4
 
-import anthropic
+import structlog
 from pydantic import BaseModel
 
 from src.config.industry_schema import (
@@ -53,6 +58,8 @@ from src.config.industry_schema import (
     VisualizationType,
 )
 from src.config.settings import get_settings
+
+logger = structlog.get_logger(__name__)
 
 
 # =============================================================================
@@ -339,28 +346,56 @@ Output ONLY valid JSON."""
 
 class ConfigGenerator:
     """
-    AI-powered configuration generator using Claude.
+    AI-powered configuration generator using Gemini Flash or Claude.
 
     Generates complete IndustryConfig objects from natural language
     descriptions through a conversational interface.
+
+    Uses Gemini 2.0 Flash when GOOGLE_API_KEY is configured, otherwise
+    falls back to Anthropic Claude.
     """
 
-    def __init__(self, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, model: str | None = None):
         """Initialize the generator with a specific model."""
         settings = get_settings()
-        self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
-        self.model = model
+        self._use_gemini = False
         self._sessions: dict[str, OnboardingSession] = {}
 
-    def _call_claude(self, messages: list[dict], system: str = SYSTEM_PROMPT) -> str:
-        """Make a call to Claude API."""
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=8192,
-            system=system,
-            messages=messages,
-        )
-        return response.content[0].text
+        if settings.google_api_key:
+            import google.generativeai as genai
+
+            genai.configure(api_key=settings.google_api_key.get_secret_value())
+            self._gemini_model_name = model or "gemini-2.0-flash"
+            self._use_gemini = True
+            logger.info("config_generator_using_gemini", model=self._gemini_model_name)
+        else:
+            import anthropic
+
+            self.client = anthropic.Anthropic(
+                api_key=settings.anthropic_api_key.get_secret_value()
+            )
+            self.model = model or "claude-3-haiku-20240307"
+            logger.info("config_generator_using_anthropic", model=self.model)
+
+    def _call_llm(self, messages: list[dict], system: str = SYSTEM_PROMPT) -> str:
+        """Make a call to the configured LLM backend."""
+        if self._use_gemini:
+            import google.generativeai as genai
+
+            model = genai.GenerativeModel(
+                model_name=self._gemini_model_name,
+                system_instruction=system,
+            )
+            response = model.generate_content(messages[-1]["content"])
+            return response.text
+        else:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=8192,
+                system=system,
+                messages=messages,
+            )
+            return response.content[0].text
 
     def _parse_json_response(self, text: str) -> dict[str, Any]:
         """Parse JSON from Claude's response, handling potential formatting."""
@@ -675,7 +710,7 @@ class ConfigGenerator:
 
         try:
             # First, check if we need more information
-            clarification_response = self._call_claude(
+            clarification_response = self._call_llm(
                 messages=[{
                     "role": "user",
                     "content": CLARIFICATION_PROMPT.format(
@@ -738,7 +773,7 @@ class ConfigGenerator:
             # Check if we now have enough information
             conversation_context = self._build_conversation_context(session)
 
-            clarification_response = self._call_claude(
+            clarification_response = self._call_llm(
                 messages=[{
                     "role": "user",
                     "content": CLARIFICATION_PROMPT.format(
@@ -783,7 +818,7 @@ class ConfigGenerator:
         """Generate a complete configuration from the session context."""
         conversation_context = self._build_conversation_context(session)
 
-        config_response = self._call_claude(
+        config_response = self._call_llm(
             messages=[{
                 "role": "user",
                 "content": CONFIG_GENERATION_PROMPT.format(
@@ -853,7 +888,7 @@ class ConfigGenerator:
 
         try:
             # Ask Claude for the changes
-            refinement_response = self._call_claude(
+            refinement_response = self._call_llm(
                 messages=[{
                     "role": "user",
                     "content": REFINEMENT_PROMPT.format(
