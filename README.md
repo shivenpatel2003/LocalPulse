@@ -1,8 +1,8 @@
 # LocalPulse
 
-**AI-powered restaurant monitoring and competitive intelligence platform**
+**AI-powered business monitoring and competitive intelligence platform**
 
-LocalPulse helps restaurant owners understand their competitive landscape, track customer sentiment, and receive actionable insights through an intelligent multi-agent system.
+LocalPulse helps business owners — from restaurants and salons to clinics and retail shops — understand their competitive landscape, track customer sentiment, and receive actionable insights through an intelligent multi-agent system.
 
 ## Features
 
