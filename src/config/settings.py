@@ -105,6 +105,19 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Stripe (Payments)
+    # -------------------------------------------------------------------------
+    stripe_secret_key: SecretStr | None = Field(
+        default=None, description="Stripe secret key (sk_test_... or sk_live_...)"
+    )
+    stripe_webhook_secret: SecretStr | None = Field(
+        default=None, description="Stripe webhook signing secret (whsec_...)"
+    )
+    stripe_price_id: str = Field(
+        default="", description="Stripe Price ID for the monthly subscription"
+    )
+
+    # -------------------------------------------------------------------------
     # Application Settings
     # -------------------------------------------------------------------------
     app_env: Literal["development", "staging", "production"] = Field(

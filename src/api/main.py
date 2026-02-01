@@ -37,6 +37,7 @@ from src.api.routes.clients import router as clients_router
 from src.api.routes.reports import router as reports_router
 from src.api.routes.schedules import router as schedules_router
 from src.api.routes.onboarding import router as onboarding_router
+from src.api.routes.billing import router as billing_router
 from src.config.settings import get_settings
 from src.scheduler.scheduler import Scheduler
 
@@ -86,7 +87,13 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     """
 
     # Endpoints that don't require authentication
-    PUBLIC_PATHS = {"/", "/health", "/health/live", "/health/ready", "/docs", "/redoc", "/openapi.json"}
+    PUBLIC_PATHS = {
+        "/", "/health", "/health/live", "/health/ready",
+        "/docs", "/redoc", "/openapi.json",
+        "/api/v1/billing/webhook",
+        "/api/v1/billing/success",
+        "/api/v1/billing/cancel",
+    }
 
     async def dispatch(self, request: Request, call_next):
         settings = get_settings()
@@ -220,6 +227,10 @@ app = FastAPI(
             "name": "Onboarding",
             "description": "AI-powered configuration generation - describe your business and get a custom monitoring setup",
         },
+        {
+            "name": "Billing",
+            "description": "Stripe payment and subscription management",
+        },
     ],
 )
 
@@ -329,6 +340,7 @@ api_v1_router.include_router(clients_router)
 api_v1_router.include_router(reports_router)
 api_v1_router.include_router(schedules_router)
 api_v1_router.include_router(onboarding_router)
+api_v1_router.include_router(billing_router)
 
 # Include the versioned router
 app.include_router(api_v1_router)
@@ -349,6 +361,7 @@ async def api_v1_root() -> dict:
             "reports": "/api/v1/reports",
             "schedules": "/api/v1/schedules",
             "onboarding": "/api/v1/onboard",
+            "billing": "/api/v1/billing",
         },
         "documentation": "/docs",
     }
