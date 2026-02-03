@@ -222,3 +222,10 @@ zipp==3.23.0
 zope.event==6.1
 zope.interface==8.2
 zstandard==0.25.0
+supabase
+apify-client
+prometheus-client
+redis
+sendgrid
+tenacity
+watchfiles
