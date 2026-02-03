@@ -11,3 +11,4 @@ apscheduler==3.11.2
 email-validator==2.2.0
 python-dotenv==1.1.0
 markupsafe==3.0.2
+structlog
