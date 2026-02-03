@@ -38,6 +38,7 @@ from src.api.routes.reports import router as reports_router
 from src.api.routes.schedules import router as schedules_router
 from src.api.routes.onboarding import router as onboarding_router
 from src.api.routes.billing import router as billing_router
+from src.api.routes.landing import router as landing_router
 from src.config.settings import get_settings
 from src.scheduler.scheduler import Scheduler
 
@@ -313,16 +314,6 @@ async def generic_exception_handler(
 # =============================================================================
 
 
-@app.get("/", include_in_schema=False)
-async def root() -> dict:
-    """Root endpoint - redirects to API documentation."""
-    return {
-        "name": API_TITLE,
-        "version": API_VERSION,
-        "docs": "/docs",
-        "health": "/health",
-        "api": "/api/v1",
-    }
 
 
 # =============================================================================
@@ -344,6 +335,7 @@ api_v1_router.include_router(billing_router)
 
 # Include the versioned router
 app.include_router(api_v1_router)
+app.include_router(landing_router)
 
 
 # =============================================================================
