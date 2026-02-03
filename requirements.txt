@@ -229,3 +229,10 @@ redis
 sendgrid
 tenacity
 watchfiles
+supabase
+apify-client
+prometheus-client
+redis
+sendgrid
+tenacity
+watchfiles
