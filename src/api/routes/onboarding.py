@@ -482,6 +482,8 @@ async def confirm_onboarding(
         temp_job = ScheduledJob(
             client_id=client_id,
             business_name=request.business_name,
+            location=config.location or "",
+            owner_email=request.owner_email,
             frequency=request.schedule_frequency,
             schedule_day=request.schedule_day,
             schedule_hour=request.schedule_hour,
