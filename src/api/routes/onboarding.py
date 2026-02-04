@@ -477,13 +477,16 @@ async def confirm_onboarding(
         supabase.table("industry_configs").insert(config_data).execute()
 
         # 3. Create the scheduled job
-        from src.scheduler.scheduler import calculate_next_run
+        from src.scheduler.scheduler import ScheduledJob
 
-        next_run = calculate_next_run(
-            request.schedule_frequency,
-            request.schedule_day,
-            request.schedule_hour,
+        temp_job = ScheduledJob(
+            client_id=client_id,
+            business_name=request.business_name,
+            frequency=request.schedule_frequency,
+            schedule_day=request.schedule_day,
+            schedule_hour=request.schedule_hour,
         )
+        next_run = temp_job.calculate_next_run()
 
         job_data = {
             "id": str(uuid4()),
