@@ -164,14 +164,23 @@ async def health_check(
     """
     services = {}
 
-    # Check all services
+    # Check all services (skip unconfigured ones)
     services["supabase"] = await check_supabase_health(settings)
-    services["neo4j"] = await check_neo4j_health(settings)
-    services["pinecone"] = await check_pinecone_health(settings)
+
+    if settings.neo4j_uri:
+        services["neo4j"] = await check_neo4j_health(settings)
+    else:
+        services["neo4j"] = HealthStatus(status="skipped", message="Neo4j not configured")
+
+    if settings.pinecone_api_key:
+        services["pinecone"] = await check_pinecone_health(settings)
+    else:
+        services["pinecone"] = HealthStatus(status="skipped", message="Pinecone not configured")
+
     services["scheduler"] = await check_scheduler_health()
 
-    # Determine overall status
-    statuses = [s.status for s in services.values()]
+    # Determine overall status (ignore skipped services)
+    statuses = [s.status for s in services.values() if s.status != "skipped"]
     if all(s == "healthy" for s in statuses):
         overall_status = "healthy"
     elif any(s == "unhealthy" for s in statuses):

@@ -37,14 +37,14 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Neo4j (Knowledge Graph)
     # -------------------------------------------------------------------------
-    neo4j_uri: str = Field(..., description="Neo4j connection URI (bolt://)")
-    neo4j_user: str = Field(..., description="Neo4j username")
-    neo4j_password: SecretStr = Field(..., description="Neo4j password")
+    neo4j_uri: str | None = Field(default=None, description="Neo4j connection URI (bolt://)")
+    neo4j_user: str | None = Field(default=None, description="Neo4j username")
+    neo4j_password: SecretStr | None = Field(default=None, description="Neo4j password")
 
     # -------------------------------------------------------------------------
     # Pinecone (Vector Store)
     # -------------------------------------------------------------------------
-    pinecone_api_key: SecretStr = Field(..., description="Pinecone API key")
+    pinecone_api_key: SecretStr | None = Field(default=None, description="Pinecone API key")
     pinecone_index_name: str = Field(
         default="localpulse-reviews",
         description="Pinecone index name",
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # OpenAI (Embeddings)
     # -------------------------------------------------------------------------
-    openai_api_key: SecretStr = Field(..., description="OpenAI API key for embeddings")
+    openai_api_key: SecretStr | None = Field(default=None, description="OpenAI API key for embeddings")
 
     # -------------------------------------------------------------------------
     # Anthropic (Claude LLM)
@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Cohere (Reranking & Embeddings)
     # -------------------------------------------------------------------------
-    cohere_api_key: SecretStr = Field(..., description="Cohere API key for reranking and embeddings")
+    cohere_api_key: SecretStr | None = Field(default=None, description="Cohere API key for reranking and embeddings")
     cohere_embedding_model: str = Field(
         default="embed-english-v3.0",
         description="Cohere embedding model (e.g., embed-english-v3.0, embed-multilingual-v3.0)",
@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # SendGrid (Email Delivery)
     # -------------------------------------------------------------------------
-    sendgrid_api_key: SecretStr = Field(..., description="SendGrid API key for emails")
+    sendgrid_api_key: SecretStr | None = Field(default=None, description="SendGrid API key for emails")
     from_email: str = Field(
         default="reports@localpulse.io",
         description="Sender email address for outgoing emails",
