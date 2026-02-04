@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set Up Your Reports — LocalPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,500;6..12,600;6..12,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0B1120;
+      --bg-card: #172033;
+      --bg-input: #0F172A;
+      --accent: #06B6D4;
+      --accent-hover: #22D3EE;
+      --accent-glow: rgba(6, 182, 212, 0.15);
+      --green: #10B981;
+      --red: #EF4444;
+      --text-primary: #F1F5F9;
+      --text-secondary: #CBD5E1;
+      --text-muted: #64748B;
+      --border: rgba(148, 163, 184, 0.1);
+      --border-accent: rgba(6, 182, 212, 0.3);
+      --font-heading: 'Sora', sans-serif;
+      --font-body: 'Nunito Sans', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-body); background: var(--bg-primary);
+      color: var(--text-secondary); font-size: 17px; line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    /* Layout */
+    .wrapper { max-width: 680px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* Header */
+    .header { text-align: center; margin-bottom: 40px; }
+    .logo { font-family: var(--font-heading); font-weight: 800; font-size: 1.4rem; color: var(--text-primary); margin-bottom: 24px; }
+    .logo span { color: var(--accent); }
+    .success-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(16, 185, 129, 0.1); color: var(--green);
+      padding: 8px 20px; border-radius: 100px; font-size: 14px; font-weight: 600;
+      margin-bottom: 20px; border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .header h1 {
+      font-family: var(--font-heading); color: var(--text-primary);
+      font-size: clamp(1.5rem, 4vw, 1.9rem); font-weight: 700;
+      margin-bottom: 10px; letter-spacing: -0.02em;
+    }
+    .header p { color: var(--text-muted); font-size: 15px; max-width: 480px; margin: 0 auto; }
+
+    /* Progress */
+    .progress-bar { display: flex; justify-content: center; gap: 8px; margin-bottom: 36px; }
+    .progress-dot {
+      width: 48px; height: 5px; border-radius: 3px;
+      background: rgba(148, 163, 184, 0.15); transition: all 0.4s ease;
+    }
+    .progress-dot.active { background: var(--accent); box-shadow: 0 0 12px rgba(6, 182, 212, 0.3); }
+    .progress-dot.done { background: var(--green); }
+
+    /* Steps */
+    .step { display: none; }
+    .step.active { display: block; animation: slideUp 0.45s ease; }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card */
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px;
+    }
+    .card h2 {
+      font-family: var(--font-heading); color: var(--text-primary);
+      font-size: 1.3rem; font-weight: 700; margin-bottom: 6px;
+    }
+    .card .subtitle { color: var(--text-muted); font-size: 15px; margin-bottom: 24px; }
+
+    /* Forms */
+    textarea, input[type="text"], input[type="email"], select {
+      width: 100%; padding: 14px 16px; background: var(--bg-input);
+      border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text-primary); font-family: var(--font-body); font-size: 15px;
+      outline: none; transition: border-color 0.2s;
+    }
+    textarea:focus, input:focus, select:focus { border-color: var(--accent); }
+    textarea { min-height: 140px; resize: vertical; line-height: 1.6; }
+    textarea::placeholder, input::placeholder { color: var(--text-muted); }
+    select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748B' fill='none' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 40px; }
+    select option { background: var(--bg-card); color: var(--text-primary); }
+    label { display: block; color: var(--text-primary); font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+    .form-group { margin-bottom: 20px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 15px 28px; border: none; border-radius: 10px;
+      font-family: var(--font-heading); font-weight: 600; font-size: 15px;
+      cursor: pointer; transition: all 0.2s; width: 100%; gap: 8px;
+    }
+    .btn-primary { background: var(--accent); color: #0B1120; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(6, 182, 212, 0.25); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted); border: 1px solid var(--border);
+      margin-top: 12px; font-size: 14px;
+    }
+    .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }
+    .btn-sm { padding: 10px 20px; font-size: 13px; width: auto; }
+
+    /* Errors */
+    .error-msg {
+      display: none; background: rgba(239, 68, 68, 0.1); color: var(--red);
+      padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-top: 16px;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    /* Loading spinner */
+    .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(11,17,32,0.3); border-top-color: #0B1120; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Questions list */
+    .question-item {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 16px; background: var(--bg-input); border-radius: 10px;
+      margin-bottom: 10px; font-size: 15px; line-height: 1.5;
+      border: 1px solid var(--border);
+    }
+    .q-num {
+      flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent-glow); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-heading); font-size: 13px; font-weight: 700;
+      border: 1px solid var(--border-accent);
+    }
+
+    /* Config preview */
+    .preview-section { margin-bottom: 24px; }
+    .preview-section:last-child { margin-bottom: 0; }
+    .preview-section h3 {
+      font-family: var(--font-heading); color: var(--text-primary);
+      font-size: 0.95rem; font-weight: 600; margin-bottom: 12px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag {
+      padding: 6px 14px; background: var(--accent-glow); color: var(--accent);
+      border-radius: 100px; font-size: 13px; font-weight: 600;
+      border: 1px solid var(--border-accent);
+    }
+    .source-item {
+      padding: 10px 14px; background: var(--bg-input); border-radius: 8px;
+      margin-bottom: 8px; font-size: 14px; border: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .source-icon { font-size: 16px; }
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metric-card {
+      padding: 14px; background: var(--bg-input); border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .metric-card strong { display: block; color: var(--text-primary); font-size: 14px; margin-bottom: 4px; }
+    .metric-card p { color: var(--text-muted); font-size: 13px; margin: 0; line-height: 1.4; }
+    .kpi-badge {
+      display: inline-block; margin-top: 8px; padding: 2px 8px;
+      background: rgba(16, 185, 129, 0.1); color: var(--green);
+      border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    .reasoning-box {
+      background: var(--bg-input); border-radius: 10px; padding: 16px;
+      border: 1px solid var(--border); margin-top: 8px;
+    }
+    .reasoning-box p { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin: 0; }
+
+    /* Refine section */
+    .refine-section { display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+    .refine-section.visible { display: block; }
+
+    /* Schedule row */
+    .schedule-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+    /* Done */
+    .done-icon { font-size: 56px; text-align: center; margin-bottom: 16px; }
+    .done-msg {
+      text-align: center; color: var(--text-secondary); font-size: 15px;
+      line-height: 1.7; max-width: 460px; margin: 0 auto;
+    }
+    .done-card { text-align: center; }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .wrapper { padding: 24px 16px 60px; }
+      .card { padding: 24px 20px; }
+      .metrics-grid { grid-template-columns: 1fr; }
+      .schedule-grid { grid-template-columns: 1fr; }
+      .header h1 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">Local<span>Pulse</span></div>
+      <div class="success-badge">&#10003; Payment Successful</div>
+      <h1>Now let's set up your intelligence reports</h1>
+      <p>Describe your business and our AI will build a custom monitoring config in seconds.</p>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-bar">
+      <div class="progress-dot active" id="prog-1"></div>
+      <div class="progress-dot" id="prog-2"></div>
+      <div class="progress-dot" id="prog-3"></div>
+      <div class="progress-dot" id="prog-4"></div>
+    </div>
+
+    <!-- ========== STEP 1: Describe ========== -->
+    <div class="step active" id="step-1">
+      <div class="card">
+        <h2>Tell us about your business</h2>
+        <p class="subtitle">The more detail you give, the smarter your reports will be.</p>
+        <div class="form-group">
+          <textarea id="description" placeholder="e.g. I run a Thai restaurant in Manchester city centre called Siam Garden. We've been open 2 years and have about 180 Google reviews. I want to understand what customers love and hate, track our main competitors (Chaophraya and Tampopo), and get weekly reports on review trends."></textarea>
+        </div>
+        <button class="btn btn-primary" id="step-1-btn" onclick="startOnboarding()">
+          Generate My Config &rarr;
+        </button>
+        <div class="error-msg" id="step-1-error"></div>
+      </div>
+    </div>
+
+    <!-- ========== STEP 2: Questions ========== -->
+    <div class="step" id="step-2">
+      <div class="card">
+        <h2>A few quick questions</h2>
+        <p class="subtitle">Help our AI fine-tune your setup.</p>
+        <div id="questions-list"></div>
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="answers">Your answers</label>
+          <textarea id="answers" placeholder="Answer the questions above in any format you like..."></textarea>
+        </div>
+        <button class="btn btn-primary" id="step-2-btn" onclick="continueOnboarding()">
+          Submit Answers &rarr;
+        </button>
+        <div class="error-msg" id="step-2-error"></div>
+      </div>
+    </div>
+
+    <!-- ========== STEP 3: Preview ========== -->
+    <div class="step" id="step-3">
+      <div class="card">
+        <h2>Your Custom Intelligence Setup</h2>
+        <p class="subtitle">Here's what our AI built for you. Review it below.</p>
+        <div id="config-preview"></div>
+        <button class="btn btn-primary" id="step-3-btn" onclick="goToConfirm()">
+          Looks Good &mdash; Continue &rarr;
+        </button>
+        <button class="btn btn-ghost" onclick="toggleRefine()">
+          I'd like to change something
+        </button>
+        <div class="refine-section" id="refine-section">
+          <div class="form-group">
+            <label for="refinement">What would you like to change?</label>
+            <textarea id="refinement" style="min-height:90px" placeholder="e.g. Also track Instagram mentions, remove the pricing theme, add a competitor called Nando's..."></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" id="refine-btn" onclick="refineConfig()">
+            Apply Changes
+          </button>
+        </div>
+        <div class="error-msg" id="step-3-error"></div>
+      </div>
+    </div>
+
+    <!-- ========== STEP 4: Confirm ========== -->
+    <div class="step" id="step-4">
+      <div class="card">
+        <h2>Confirm &amp; Start Monitoring</h2>
+        <p class="subtitle">Check your details and choose your report schedule.</p>
+        <div class="form-group">
+          <label for="confirm-name">Business name</label>
+          <input type="text" id="confirm-name" placeholder="Your Business Name">
+        </div>
+        <div class="form-group">
+          <label for="confirm-email">Report delivery email</label>
+          <input type="email" id="confirm-email" placeholder="you@business.com">
+        </div>
+        <div class="form-group">
+          <label>Report schedule</label>
+          <div class="schedule-grid">
+            <select id="confirm-freq">
+              <option value="weekly" selected>Weekly</option>
+              <option value="daily">Daily</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <select id="confirm-day">
+              <option value="monday" selected>Monday</option>
+              <option value="tuesday">Tuesday</option>
+              <option value="wednesday">Wednesday</option>
+              <option value="thursday">Thursday</option>
+              <option value="friday">Friday</option>
+              <option value="saturday">Saturday</option>
+              <option value="sunday">Sunday</option>
+            </select>
+            <select id="confirm-hour">
+              <option value="7">7:00 AM</option>
+              <option value="8">8:00 AM</option>
+              <option value="9" selected>9:00 AM</option>
+              <option value="10">10:00 AM</option>
+              <option value="12">12:00 PM</option>
+              <option value="17">5:00 PM</option>
+              <option value="18">6:00 PM</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="step-4-btn" onclick="confirmOnboarding()">
+          Activate My Reports &rarr;
+        </button>
+        <div class="error-msg" id="step-4-error"></div>
+      </div>
+    </div>
+
+    <!-- ========== STEP 5: Done ========== -->
+    <div class="step" id="step-5">
+      <div class="card done-card">
+        <div class="done-icon">&#127881;</div>
+        <h2>You're all set!</h2>
+        <div class="done-msg" id="done-message">
+          Your intelligence reports are now active. You'll receive your first report at the scheduled time.
+        </div>
+        <div style="margin-top: 28px;">
+          <a href="/" class="btn btn-ghost" style="width: auto; display: inline-flex;">
+            &larr; Back to LocalPulse
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    /* ===== State ===== */
+    let onboardSessionId = null;
+    let currentConfig = null;
+    let stripeEmail = '';
+    let stripeBizName = '';
+    const stripeSessionId = '{{ session_id }}';
+
+    /* ===== Init: fetch Stripe session info ===== */
+    async function init() {
+      if (stripeSessionId) {
+        try {
+          const res = await fetch('/api/v1/billing/session-info?session_id=' + encodeURIComponent(stripeSessionId));
+          if (res.ok) {
+            const data = await res.json();
+            stripeEmail = data.customer_email || '';
+            stripeBizName = data.business_name || '';
+            if (stripeBizName) {
+              document.getElementById('confirm-name').value = stripeBizName;
+            }
+            if (stripeEmail) {
+              document.getElementById('confirm-email').value = stripeEmail;
+            }
+          }
+        } catch (e) {
+          console.log('Could not fetch Stripe session:', e);
+        }
+      }
+    }
+
+    /* ===== Step Navigation ===== */
+    function goToStep(n) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.getElementById('step-' + n).classList.add('active');
+      for (let i = 1; i <= 4; i++) {
+        const dot = document.getElementById('prog-' + i);
+        dot.classList.remove('active', 'done');
+        if (i < n) dot.classList.add('done');
+        if (i === n && n <= 4) dot.classList.add('active');
+        if (n === 5) { dot.classList.remove('active'); dot.classList.add('done'); }
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /* ===== Step 1: Start ===== */
+    async function startOnboarding() {
+      const desc = document.getElementById('description').value.trim();
+      hideError('step-1-error');
+      if (desc.length < 10) {
+        showError('step-1-error', 'Please write at least a couple of sentences about your business.');
+        return;
+      }
+      setLoading('step-1-btn', 'Analyzing your business...');
+      try {
+        const res = await fetch('/api/v1/onboard/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_description: desc }),
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Something went wrong'); }
+        const data = await res.json();
+        onboardSessionId = data.session_id;
+        if (data.status === 'needs_more_info') {
+          renderQuestions(data.questions);
+          goToStep(2);
+        } else if (data.status === 'config_ready') {
+          renderPreview(data.config_preview, data.reasoning);
+          goToStep(3);
+        } else if (data.error) {
+          throw new Error(data.error);
+        }
+      } catch (e) {
+        showError('step-1-error', e.message);
+      }
+      resetBtn('step-1-btn', 'Generate My Config &rarr;');
+    }
+
+    /* ===== Step 2: Continue ===== */
+    async function continueOnboarding() {
+      const answers = document.getElementById('answers').value.trim();
+      hideError('step-2-error');
+      if (answers.length < 5) {
+        showError('step-2-error', 'Please provide some answers to the questions above.');
+        return;
+      }
+      setLoading('step-2-btn', 'Processing...');
+      try {
+        const res = await fetch('/api/v1/onboard/continue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: onboardSessionId, answers: answers }),
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Something went wrong'); }
+        const data = await res.json();
+        if (data.status === 'needs_more_info') {
+          renderQuestions(data.questions);
+          document.getElementById('answers').value = '';
+          resetBtn('step-2-btn', 'Submit Answers &rarr;');
+        } else if (data.status === 'config_ready') {
+          renderPreview(data.config_preview, data.reasoning);
+          goToStep(3);
+        }
+      } catch (e) {
+        showError('step-2-error', e.message);
+        resetBtn('step-2-btn', 'Submit Answers &rarr;');
+      }
+    }
+
+    /* ===== Step 3: Preview & Refine ===== */
+    function goToConfirm() { goToStep(4); }
+
+    function toggleRefine() {
+      const s = document.getElementById('refine-section');
+      s.classList.toggle('visible');
+    }
+
+    async function refineConfig() {
+      const text = document.getElementById('refinement').value.trim();
+      hideError('step-3-error');
+      if (text.length < 5) {
+        showError('step-3-error', 'Please describe what you\'d like to change.');
+        return;
+      }
+      setLoading('refine-btn', 'Updating...');
+      try {
+        const res = await fetch('/api/v1/onboard/refine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: onboardSessionId, refinement: text }),
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed to refine'); }
+        const data = await res.json();
+        renderPreview(data.config_preview, data.reasoning);
+        document.getElementById('refinement').value = '';
+        document.getElementById('refine-section').classList.remove('visible');
+      } catch (e) {
+        showError('step-3-error', e.message);
+      }
+      resetBtn('refine-btn', 'Apply Changes');
+    }
+
+    /* ===== Step 4: Confirm ===== */
+    async function confirmOnboarding() {
+      const name = document.getElementById('confirm-name').value.trim();
+      const email = document.getElementById('confirm-email').value.trim();
+      const freq = document.getElementById('confirm-freq').value;
+      const day = document.getElementById('confirm-day').value;
+      const hour = parseInt(document.getElementById('confirm-hour').value);
+      hideError('step-4-error');
+      if (!name) { showError('step-4-error', 'Please enter your business name.'); return; }
+      if (!email || !email.includes('@')) { showError('step-4-error', 'Please enter a valid email.'); return; }
+      setLoading('step-4-btn', 'Creating your setup...');
+      try {
+        const res = await fetch('/api/v1/onboard/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: onboardSessionId,
+            business_name: name,
+            owner_email: email,
+            schedule_frequency: freq,
+            schedule_day: day,
+            schedule_hour: hour,
+          }),
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Something went wrong'); }
+        const data = await res.json();
+        document.getElementById('done-message').innerHTML =
+          '<p style="margin-bottom:12px">' + escapeHtml(data.message) + '</p>' +
+          '<p style="color:var(--text-muted);font-size:14px">A confirmation has been sent to <strong style="color:var(--accent)">' + escapeHtml(email) + '</strong></p>';
+        goToStep(5);
+      } catch (e) {
+        showError('step-4-error', e.message);
+        resetBtn('step-4-btn', 'Activate My Reports &rarr;');
+      }
+    }
+
+    /* ===== Renderers ===== */
+    function renderQuestions(questions) {
+      const el = document.getElementById('questions-list');
+      el.innerHTML = questions.map((q, i) =>
+        '<div class="question-item"><span class="q-num">' + (i + 1) + '</span><span>' + escapeHtml(q) + '</span></div>'
+      ).join('');
+    }
+
+    function renderPreview(preview, reasoning) {
+      if (!preview) return;
+      currentConfig = preview;
+      const el = document.getElementById('config-preview');
+      let h = '';
+
+      if (preview.themes && preview.themes.length) {
+        h += '<div class="preview-section"><h3>Analysis Themes</h3><div class="tags">';
+        preview.themes.forEach(t => { h += '<span class="tag">' + escapeHtml(t.display_name) + '</span>'; });
+        h += '</div></div>';
+      }
+
+      if (preview.data_sources && preview.data_sources.length) {
+        const icons = { google_places: '&#x1F50D;', instagram: '&#x1F4F7;', tiktok: '&#x1F3B5;', twitter: '&#x1F426;', yelp: '&#x2B50;', tripadvisor: '&#x1F30D;', default: '&#x1F4CA;' };
+        h += '<div class="preview-section"><h3>Data Sources</h3>';
+        preview.data_sources.filter(s => s.enabled).forEach(s => {
+          const icon = icons[s.source_type] || icons['default'];
+          h += '<div class="source-item"><span class="source-icon">' + icon + '</span>' + escapeHtml(s.display_name) + '</div>';
+        });
+        h += '</div>';
+      }
+
+      if (preview.custom_fields && preview.custom_fields.length) {
+        h += '<div class="preview-section"><h3>Tracking Metrics</h3><div class="metrics-grid">';
+        preview.custom_fields.forEach(f => {
+          h += '<div class="metric-card"><strong>' + escapeHtml(f.display_name) + '</strong>';
+          h += '<p>' + escapeHtml(f.description) + '</p>';
+          if (f.is_kpi) h += '<span class="kpi-badge">KPI</span>';
+          h += '</div>';
+        });
+        h += '</div></div>';
+      }
+
+      const extras = [];
+      if (preview.competitor_tracking) extras.push('&#x1F3AF; Competitor tracking enabled');
+      if (preview.report_sections) extras.push('&#x1F4CB; ' + preview.report_sections + ' report sections');
+      if (preview.alert_rules) extras.push('&#x1F514; ' + preview.alert_rules + ' alert rules');
+      if (extras.length) {
+        h += '<div class="preview-section"><h3>Extras</h3>';
+        extras.forEach(e => { h += '<div class="source-item">' + e + '</div>'; });
+        h += '</div>';
+      }
+
+      if (reasoning) {
+        h += '<div class="preview-section"><h3>AI Reasoning</h3><div class="reasoning-box"><p>' + escapeHtml(reasoning) + '</p></div></div>';
+      }
+
+      el.innerHTML = h;
+    }
+
+    /* ===== Utilities ===== */
+    function showError(id, msg) {
+      const el = document.getElementById(id);
+      el.textContent = msg; el.style.display = 'block';
+    }
+    function hideError(id) {
+      const el = document.getElementById(id);
+      el.style.display = 'none';
+    }
+    function setLoading(id, text) {
+      const btn = document.getElementById(id);
+      btn.innerHTML = '<span class="spinner"></span> ' + text;
+      btn.disabled = true;
+    }
+    function resetBtn(id, html) {
+      const btn = document.getElementById(id);
+      btn.innerHTML = html; btn.disabled = false;
+    }
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    /* ===== Boot ===== */
+    init();
+  </script>
+</body>
+</html>

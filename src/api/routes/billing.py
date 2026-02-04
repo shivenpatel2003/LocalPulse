@@ -203,6 +203,29 @@ async def stripe_webhook(http_request: Request) -> dict:
     return {"status": "ok"}
 
 
+
+@router.get(
+    "/session-info",
+    status_code=status.HTTP_200_OK,
+    summary="Get checkout session info",
+    include_in_schema=False,
+)
+async def get_session_info(session_id: str = "") -> dict:
+    """Return business name and email from a Stripe Checkout session."""
+    settings = get_settings()
+    if not session_id or not settings.stripe_secret_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid session ID")
+    stripe.api_key = settings.stripe_secret_key.get_secret_value()
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        return {
+            "customer_email": session.customer_email or "",
+            "business_name": (session.metadata or {}).get("business_name", ""),
+        }
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)[:100])
+
+
 @router.get(
     "/success",
     response_class=HTMLResponse,
@@ -212,7 +235,7 @@ async def stripe_webhook(http_request: Request) -> dict:
 )
 async def checkout_success(session_id: str = "") -> HTMLResponse:
     """Render the checkout success thank-you page."""
-    template = _templates.get_template("checkout_success.html")
+    template = _templates.get_template("onboarding.html")
     html = template.render(session_id=session_id)
     return HTMLResponse(content=html)
 
