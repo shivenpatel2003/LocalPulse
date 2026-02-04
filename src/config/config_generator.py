@@ -109,7 +109,7 @@ class OnboardingSession:
                 {"role": m.role, "content": m.content, "timestamp": m.timestamp.isoformat()}
                 for m in self.conversation_history
             ],
-            "current_config": self.current_config.model_dump() if self.current_config else None,
+            "current_config": self.current_config.model_dump(mode="json") if self.current_config else None,
             "questions": self.questions,
             "generation_reasoning": self.generation_reasoning,
             "created_at": self.created_at.isoformat(),
