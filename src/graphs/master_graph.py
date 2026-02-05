@@ -54,6 +54,7 @@ class PipelineResult:
         analysis_summary: Optional[dict] = None,
         report_summary: Optional[dict] = None,
         errors: Optional[list[str]] = None,
+        report_html: Optional[str] = None,
         started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
     ):
@@ -65,6 +66,7 @@ class PipelineResult:
         self.analysis_summary = analysis_summary or {}
         self.report_summary = report_summary or {}
         self.errors = errors or []
+        self.report_html = report_html or ""
         self.started_at = started_at
         self.completed_at = completed_at
 
@@ -78,6 +80,7 @@ class PipelineResult:
             "collection_summary": self.collection_summary,
             "analysis_summary": self.analysis_summary,
             "report_summary": self.report_summary,
+            "report_html": self.report_html,
             "errors": self.errors,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
@@ -567,6 +570,7 @@ async def run_full_pipeline(
             "email_sent": report_state.get("email_sent", False),
         }
 
+        result.report_html = report_state.get("report_html", "")
         # Determine success
         result.phase_completed = current_phase
         result.success = current_phase == WorkflowPhase.COMPLETE.value

@@ -60,6 +60,7 @@ async def _store_report(client_id: UUID, report_data: dict, supabase: Client) ->
             "analysis_summary": report_data.get("analysis_summary", {}),
             "report_summary": report_data.get("report_summary", {}),
             "errors": report_data.get("errors", []),
+            "report_html": report_data.get("report_html"),
         }
 
         supabase.table("reports").insert(report_record).execute()
