@@ -120,6 +120,7 @@ async def get_latest_report(
                 analysis_summary=report.get("analysis_summary", {}),
                 report_summary=report.get("report_summary", {}),
                 errors=report.get("errors", []),
+                report_html=report.get("report_html"),
             )
 
     except Exception as e:
