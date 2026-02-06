@@ -234,6 +234,25 @@ async def get_report_history(
     return ReportHistoryResponse(reports=reports, total=total)
 
 
+
+@router.get(
+    "/{client_id}/view",
+    response_class=HTMLResponse,
+    summary="View report in browser",
+    include_in_schema=False,
+)
+async def view_report(
+    client_id: UUID,
+    supabase: Client = Depends(get_supabase),
+):
+    """Render the latest report HTML directly in browser."""
+    result = supabase.table("reports").select("report_html").eq(
+        "client_id", str(client_id)
+    ).order("generated_at", desc=True).limit(1).execute()
+    if not result.data or not result.data[0].get("report_html"):
+        return HTMLResponse("<h1>No report found</h1>", status_code=404)
+    return HTMLResponse(result.data[0]["report_html"])
+
 @router.post(
     "/{client_id}/run",
     response_model=ReportRunResponse,
