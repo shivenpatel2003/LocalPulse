@@ -1,3 +1,4 @@
+from fastapi.responses import HTMLResponse
 """Report endpoints for the LocalPulse API.
 
 Provides endpoints for viewing and triggering report generation.
