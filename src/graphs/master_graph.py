@@ -291,6 +291,9 @@ async def run_report_phase(state: MasterState) -> dict:
         # Compile report graph
         report_graph = compile_report_graph()
 
+        # Get owner_email from master state's report_state
+        owner_email = state.get("report_state", {}).get("owner_email")
+
         # Build analysis data for report
         analysis_data = {
             "sentiment_results": analysis_state.get("sentiment_results", {}),
@@ -299,15 +302,15 @@ async def run_report_phase(state: MasterState) -> dict:
             "insights": analysis_state.get("insights", []),
             "recommendations": analysis_state.get("recommendations", []),
         }
+        # Include owner_email in analysis_data as fallback delivery path
+        if owner_email:
+            analysis_data["owner_email"] = owner_email
 
         # Get business name
         business_name = (
             analysis_state.get("sentiment_results", {}).get("business_name")
             or collection_state.get("business_name", "Unknown")
         )
-
-        # Get owner_email from master state's report_state
-        owner_email = state.get("report_state", {}).get("owner_email")
 
         # Create initial report state with owner_email
         initial_state = create_report_state(

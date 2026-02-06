@@ -850,16 +850,23 @@ async def prepare_report_data(state: ReportState) -> dict:
         "detailed_recommendations": sentiment_results.get("detailed_recommendations", []),
     }
 
+    # Preserve owner_email: check state channel first, then analysis dict as fallback
+    owner_email = state.get("owner_email") or analysis.get("owner_email")
+
     logger.info(
         "report_data_prepared",
         business_name=report_data["business_name"],
         review_count=report_data["review_count"],
+        has_email=bool(owner_email),
     )
 
-    return {
+    result = {
         "report_data": report_data,
         "status": ReportStatus.GENERATING.value,
     }
+    if owner_email:
+        result["owner_email"] = owner_email
+    return result
 
 
 async def generate_executive_summary(state: ReportState) -> dict:
