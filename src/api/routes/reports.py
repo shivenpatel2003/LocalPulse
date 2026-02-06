@@ -300,7 +300,7 @@ async def run_report(
         result = await run_full_pipeline(
             business_name=client["business_name"],
             location=client.get("location", ""),
-            owner_email=client["owner_email"] if (request is None or request.send_email) else None,
+            owner_email=client.get("owner_email") or client.get("email") if (request is None or request.send_email) else None,
         )
 
         # Store the report
