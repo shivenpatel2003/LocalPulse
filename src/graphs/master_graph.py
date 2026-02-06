@@ -312,6 +312,12 @@ async def run_report_phase(state: MasterState) -> dict:
             analysis=analysis_data,
         )
 
+        # Pass owner_email from master state into the report graph state
+        report_state = state.get("report_state", {})
+        owner_email = report_state.get("owner_email")
+        if owner_email:
+            initial_state["owner_email"] = owner_email
+
         # Run report workflow
         final_report_state = await report_graph.ainvoke(initial_state)
 
