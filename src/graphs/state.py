@@ -277,17 +277,19 @@ def create_analysis_state(
 def create_report_state(
     business_id: str,
     analysis: Optional[dict[str, Any]] = None,
+    owner_email: Optional[str] = None,
 ) -> ReportState:
     """Create an initialized ReportState.
 
     Args:
         business_id: Unique identifier for the business.
         analysis: Optional analysis results to include.
+        owner_email: Optional email address for report delivery.
 
     Returns:
         Initialized ReportState with default values.
     """
-    return ReportState(
+    state = ReportState(
         business_id=business_id,
         analysis=analysis or {},
         report_html="",
@@ -296,12 +298,16 @@ def create_report_state(
         errors=[],
         status=ReportStatus.PENDING.value,
     )
+    if owner_email:
+        state["owner_email"] = owner_email
+    return state
 
 
 def create_master_state(
     client_id: str,
     business_name: str,
     google_place_id: Optional[str] = None,
+    owner_email: Optional[str] = None,
 ) -> MasterState:
     """Create an initialized MasterState with all sub-states.
 
@@ -309,6 +315,7 @@ def create_master_state(
         client_id: Unique identifier for the client.
         business_name: Human-readable business name.
         google_place_id: Optional Google Places ID.
+        owner_email: Optional email address for report delivery.
 
     Returns:
         Fully initialized MasterState with nested sub-states.
@@ -322,7 +329,7 @@ def create_master_state(
             google_place_id=google_place_id,
         ),
         analysis_state=create_analysis_state(business_id=client_id),
-        report_state=create_report_state(business_id=client_id),
+        report_state=create_report_state(business_id=client_id, owner_email=owner_email),
         current_phase=WorkflowPhase.COLLECTION.value,
         errors=[],
     )

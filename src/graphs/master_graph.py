@@ -306,17 +306,21 @@ async def run_report_phase(state: MasterState) -> dict:
             or collection_state.get("business_name", "Unknown")
         )
 
-        # Create initial report state
+        # Get owner_email from master state's report_state
+        owner_email = state.get("report_state", {}).get("owner_email")
+
+        # Create initial report state with owner_email
         initial_state = create_report_state(
             business_id=client_id,
             analysis=analysis_data,
+            owner_email=owner_email,
         )
 
-        # Pass owner_email from master state into the report graph state
-        report_state = state.get("report_state", {})
-        owner_email = report_state.get("owner_email")
-        if owner_email:
-            initial_state["owner_email"] = owner_email
+        logger.info(
+            "report_phase_email",
+            has_email=bool(owner_email),
+            owner_email=owner_email,
+        )
 
         # Run report workflow
         final_report_state = await report_graph.ainvoke(initial_state)
@@ -527,11 +531,8 @@ async def run_full_pipeline(
         initial_state = create_master_state(
             client_id=client_id,
             business_name=full_name,
+            owner_email=owner_email,
         )
-
-        # Store email for later use (would be used in report phase)
-        if owner_email:
-            initial_state["report_state"]["owner_email"] = owner_email
 
         # Compile and run master graph
         master_graph = compile_master_graph()
