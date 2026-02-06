@@ -580,6 +580,7 @@ async def run_full_pipeline(
             "email_sent": report_state.get("email_sent", False),
             "debug_email_input": owner_email,
             "debug_email_in_report_state": final_state.get("report_state", {}).get("owner_email"),
+            "debug_report_errors": report_state.get("errors", []),
         }
 
         result.report_html = report_state.get("report_html", "")
