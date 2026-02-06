@@ -10,7 +10,7 @@ class EmailService:
     def __init__(self):
         settings = get_settings()
         self._api_key = settings.resend_api_key.get_secret_value() if settings.resend_api_key else None
-        self._from_email = "reports@localpulse.io"
+        self._from_email = "onboarding@resend.dev"
     
     @property
     def is_configured(self) -> bool:
