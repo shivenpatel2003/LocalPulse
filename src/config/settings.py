@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # SendGrid (Email Delivery)
     # -------------------------------------------------------------------------
-    sendgrid_api_key: SecretStr | None = Field(default=None, description="SendGrid API key for emails")
+    resend_api_key: SecretStr | None = Field(default=None, description="Resend API key for emails")
     from_email: str = Field(
         default="reports@localpulse.io",
         description="Sender email address for outgoing emails",
