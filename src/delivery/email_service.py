@@ -42,9 +42,10 @@ class EmailService:
             logger.error("email_error", error=str(e))
             return False
 
-    async def send_report(self, to_email: str, business_name: str, html_content: str, **kwargs) -> bool:
+    async def send_report(self, to_email: str, business_name: str, html_content: str = None, report_html: str = None, **kwargs) -> bool:
         subject = f"Your LocalPulse Report: {business_name}"
-        return await self._send_email(to_email, subject, html_content)
+        html = html_content or report_html or ""
+        return await self._send_email(to_email, subject, html)
 
     async def send_welcome_email(self, to_email: str, business_name: str, **kwargs) -> bool:
         subject = f"Welcome to LocalPulse, {business_name}!"
@@ -52,7 +53,8 @@ class EmailService:
         return await self._send_email(to_email, subject, html)
 
     async def send_alert(self, to_email: str, subject: str, html_content: str, **kwargs) -> bool:
-        return await self._send_email(to_email, subject, html_content)
+        html = html_content or report_html or ""
+        return await self._send_email(to_email, subject, html)
 
 def get_email_service() -> EmailService:
     return EmailService()
