@@ -578,16 +578,15 @@ async def run_full_pipeline(
             "html_generated": len(report_state.get("report_html", "")) > 0,
             "html_length": len(report_state.get("report_html", "")),
             "email_sent": report_state.get("email_sent", False),
-            "debug_email_input": owner_email,
-            "debug_email_in_report_state": final_state.get("report_state", {}).get("owner_email"),
-            "debug_report_errors": report_state.get("errors", []),
         }
 
         result.report_html = report_state.get("report_html", "")
         # Determine success
         result.phase_completed = current_phase
         result.success = current_phase == WorkflowPhase.COMPLETE.value
-        result.errors = errors
+        # Surface report sub-graph errors alongside master-level errors
+        report_errors = report_state.get("errors", [])
+        result.errors = errors + report_errors
 
     except Exception as e:
         logger.error("pipeline_error", error=str(e))

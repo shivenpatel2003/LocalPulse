@@ -1142,11 +1142,11 @@ async def send_email(state: ReportState) -> dict:
         email_service = get_email_service()
 
         if not email_service.is_configured:
-            logger.warning("report_email_skipped", reason="SendGrid API key not configured")
+            logger.warning("report_email_skipped", reason="Resend API key not configured")
             return {
                 "email_sent": False,
                 "status": ReportStatus.COMPLETED.value,
-                "errors": ["Email skipped: SendGrid API key not configured"],
+                "errors": ["Email skipped: Resend API key not configured"],
             }
 
         # Determine report period
