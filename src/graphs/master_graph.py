@@ -578,6 +578,8 @@ async def run_full_pipeline(
             "html_generated": len(report_state.get("report_html", "")) > 0,
             "html_length": len(report_state.get("report_html", "")),
             "email_sent": report_state.get("email_sent", False),
+            "debug_email_input": owner_email,
+            "debug_email_in_report_state": final_state.get("report_state", {}).get("owner_email"),
         }
 
         result.report_html = report_state.get("report_html", "")
