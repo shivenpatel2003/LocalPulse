@@ -100,6 +100,7 @@ class CollectionState(TypedDict, total=False):
     competitors_found: Annotated[list[dict[str, Any]], merge_lists]
     errors: Annotated[list[str], merge_lists]
     status: str
+    owner_email: str
     started_at: datetime
     completed_at: Optional[datetime]
 
@@ -152,6 +153,7 @@ class AnalysisState(TypedDict, total=False):
     recommendations: Annotated[list[str], merge_lists]
     errors: Annotated[list[str], merge_lists]
     status: str
+    owner_email: str
 
 
 # =============================================================================
@@ -181,6 +183,7 @@ class ReportState(TypedDict, total=False):
     email_sent: bool
     errors: Annotated[list[str], merge_lists]
     status: str
+    owner_email: str
 
 
 # =============================================================================
