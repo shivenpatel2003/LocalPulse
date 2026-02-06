@@ -1116,7 +1116,7 @@ async def send_email(state: ReportState) -> dict:
     html = state.get("report_html", "")
     report_data = state.get("report_data", {})
     business_name = report_data.get("business_name", "Unknown")
-    owner_email = state.get("owner_email")
+    owner_email = state.get("owner_email") or state.get("report_state", {}).get("owner_email")
 
     logger.info("report_send_email", business_name=business_name, has_email=bool(owner_email))
 
