@@ -205,23 +205,34 @@ async def run_analysis_phase(state: MasterState) -> dict:
         business_name = business_details.get("name") or collection_state.get("business_name", "Unknown")
         google_place_id = collection_state.get("google_place_id")
 
+        # Check if we have enriched competitor data with reviews
+        competitor_reviews_meta = next(
+            (r for r in reviews_collected if r.get("type") == "competitor_reviews_meta"),
+            None,
+        )
+        if competitor_reviews_meta:
+            competitors_with_reviews = competitor_reviews_meta.get("competitors_with_reviews", [])
+        else:
+            competitors_with_reviews = competitors_found
+
         # Compile and run analysis graph
         analysis_graph = compile_analysis_graph()
 
         # Create initial analysis state
+        reviews_for_analysis = [r for r in reviews_collected if r.get("type") == "review"]
         initial_state = create_analysis_state(
             business_id=google_place_id or client_id,
-            reviews=[r for r in reviews_collected if r.get("type") == "review"],
+            reviews=reviews_for_analysis,
         )
 
         # Add business context to state
         initial_state["sentiment_results"] = {
             "business_name": business_name,
             "business_rating": business_details.get("rating"),
-            "review_count": len([r for r in reviews_collected if r.get("type") == "review"]),
+            "review_count": len(reviews_for_analysis),
         }
         initial_state["competitor_analysis"] = {
-            "competitors": competitors_found,
+            "competitors": competitors_with_reviews,
             "business_name": business_name,
             "business_rating": business_details.get("rating"),
         }

@@ -117,665 +117,228 @@ HTML_REPORT_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ business_name }} - Performance Report</title>
-    <style>
-        /* Reset and Base Styles */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-        }
-
-        /* Container */
-        .email-container {
-            max-width: 680px;
-            margin: 0 auto;
-            background-color: #ffffff;
-        }
-
-        /* Header */
-        .header {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: white;
-            padding: 40px 30px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            letter-spacing: -0.5px;
-        }
-
-        .header .subtitle {
-            font-size: 14px;
-            opacity: 0.85;
-            font-weight: 400;
-        }
-
-        .header .report-period {
-            margin-top: 15px;
-            padding: 8px 16px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 20px;
-            display: inline-block;
-            font-size: 13px;
-        }
-
-        /* Executive Summary */
-        .executive-summary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-        }
-
-        .executive-summary .headline {
-            font-size: 22px;
-            font-weight: 700;
-            margin-bottom: 15px;
-            line-height: 1.3;
-        }
-
-        .executive-summary .summary-text {
-            font-size: 15px;
-            line-height: 1.7;
-            opacity: 0.95;
-        }
-
-        .key-metric {
-            margin-top: 20px;
-            padding: 15px 20px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 10px;
-            display: inline-block;
-        }
-
-        .key-metric .label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.8;
-        }
-
-        .key-metric .value {
-            font-size: 28px;
-            font-weight: 700;
-        }
-
-        /* Section Styles */
-        .section {
-            padding: 30px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .section:last-child {
-            border-bottom: none;
-        }
-
-        .section-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #1a1a2e;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 3px solid #667eea;
-            display: inline-block;
-        }
-
-        /* Score Cards */
-        .score-cards {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .score-card {
-            flex: 1;
-            min-width: 140px;
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
-        }
-
-        .score-card.primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .score-card.success {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .score-card.warning {
-            background: #fff3e0;
-            color: #ef6c00;
-        }
-
-        .score-card.neutral {
-            background: #f5f5f5;
-            color: #616161;
-        }
-
-        .score-card .score-value {
-            font-size: 32px;
-            font-weight: 700;
-            line-height: 1;
-        }
-
-        .score-card .score-label {
-            font-size: 12px;
-            margin-top: 8px;
-            opacity: 0.85;
-        }
-
-        /* Sentiment Bar */
-        .sentiment-bar {
-            height: 12px;
-            border-radius: 6px;
-            overflow: hidden;
-            display: flex;
-            margin: 15px 0;
-        }
-
-        .sentiment-bar .positive {
-            background: #4caf50;
-        }
-
-        .sentiment-bar .neutral {
-            background: #9e9e9e;
-        }
-
-        .sentiment-bar .negative {
-            background: #f44336;
-        }
-
-        .sentiment-legend {
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-            color: #666;
-        }
-
-        .sentiment-legend span {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .sentiment-legend .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-        }
-
-        .sentiment-legend .dot.positive { background: #4caf50; }
-        .sentiment-legend .dot.neutral { background: #9e9e9e; }
-        .sentiment-legend .dot.negative { background: #f44336; }
-
-        /* Theme List */
-        .theme-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .theme-item {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-
-        .theme-item.strength {
-            border-left: 4px solid #4caf50;
-        }
-
-        .theme-item.weakness {
-            border-left: 4px solid #ff9800;
-        }
-
-        .theme-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .theme-icon.strength {
-            background: #e8f5e9;
-        }
-
-        .theme-icon.weakness {
-            background: #fff3e0;
-        }
-
-        .theme-content {
-            flex: 1;
-        }
-
-        .theme-name {
-            font-weight: 600;
-            color: #1a1a2e;
-        }
-
-        .theme-detail {
-            font-size: 13px;
-            color: #666;
-            margin-top: 3px;
-        }
-
-        /* Competitor Section */
-        .competitor-card {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-        }
-
-        .competitor-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .market-position {
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .market-position.leader {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .market-position.competitive {
-            background: #e3f2fd;
-            color: #1565c0;
-        }
-
-        .market-position.lagging {
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        .advantages-list, .gaps-list {
-            margin-top: 10px;
-        }
-
-        .advantages-list li, .gaps-list li {
-            padding: 8px 0;
-            padding-left: 25px;
-            position: relative;
-            font-size: 14px;
-            color: #444;
-        }
-
-        .advantages-list li::before {
-            content: "✓";
-            position: absolute;
-            left: 0;
-            color: #4caf50;
-            font-weight: bold;
-        }
-
-        .gaps-list li::before {
-            content: "→";
-            position: absolute;
-            left: 0;
-            color: #ff9800;
-        }
-
-        /* Insights & Recommendations */
-        .insight-list, .recommendation-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .insight-item, .recommendation-item {
-            padding: 18px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            position: relative;
-            padding-left: 60px;
-        }
-
-        .priority-badge {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 700;
-            color: white;
-        }
-
-        .priority-badge.high {
-            background: linear-gradient(135deg, #f44336 0%, #e91e63 100%);
-        }
-
-        .priority-badge.medium {
-            background: linear-gradient(135deg, #ff9800 0%, #ffc107 100%);
-        }
-
-        .priority-badge.low {
-            background: linear-gradient(135deg, #4caf50 0%, #8bc34a 100%);
-        }
-
-        .insight-title, .recommendation-title {
-            font-weight: 600;
-            color: #1a1a2e;
-            margin-bottom: 5px;
-        }
-
-        .insight-text, .recommendation-text {
-            font-size: 14px;
-            color: #555;
-        }
-
-        /* Quick Wins */
-        .quick-wins {
-            background: linear-gradient(135deg, #4caf50 0%, #8bc34a 100%);
-            color: white;
-            border-radius: 12px;
-            padding: 25px;
-            margin-top: 20px;
-        }
-
-        .quick-wins h3 {
-            font-size: 16px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .quick-wins ul {
-            list-style: none;
-        }
-
-        .quick-wins li {
-            padding: 10px 0;
-            padding-left: 30px;
-            position: relative;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-        }
-
-        .quick-wins li:last-child {
-            border-bottom: none;
-        }
-
-        .quick-wins li::before {
-            content: "⚡";
-            position: absolute;
-            left: 0;
-        }
-
-        /* Footer */
-        .footer {
-            background: #1a1a2e;
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .footer-logo {
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-        .footer-text {
-            font-size: 13px;
-            opacity: 0.7;
-            margin-bottom: 15px;
-        }
-
-        .footer-links {
-            font-size: 12px;
-            opacity: 0.5;
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 600px) {
-            .header {
-                padding: 30px 20px;
-            }
-
-            .header h1 {
-                font-size: 24px;
-            }
-
-            .section {
-                padding: 25px 20px;
-            }
-
-            .score-cards {
-                flex-direction: column;
-            }
-
-            .score-card {
-                min-width: 100%;
-            }
-
-            .executive-summary .headline {
-                font-size: 20px;
-            }
-
-            .theme-item {
-                flex-direction: column;
-                text-align: center;
-            }
-
-            .insight-item, .recommendation-item {
-                padding-left: 18px;
-                padding-top: 50px;
-            }
-
-            .priority-badge {
-                left: 50%;
-                top: 15px;
-                transform: translateX(-50%);
-            }
-        }
-    </style>
 </head>
-<body>
-    <div class="email-container">
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.6;color:#333;background-color:#f5f5f5;">
+    <div style="max-width:680px;margin:0 auto;background-color:#ffffff;">
+
         <!-- Header -->
-        <div class="header">
-            <h1>{{ business_name }}</h1>
-            <div class="subtitle">Customer Intelligence Report</div>
-            <div class="report-period">{{ report_period }}</div>
+        <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);color:white;padding:40px 30px;text-align:center;">
+            <h1 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.5px;">{{ business_name }}</h1>
+            <div style="font-size:14px;opacity:0.85;margin-top:6px;">Customer Intelligence Report</div>
+            <div style="margin-top:15px;padding:8px 16px;background:rgba(255,255,255,0.1);border-radius:20px;display:inline-block;font-size:13px;">{{ report_period }}</div>
         </div>
 
         <!-- Executive Summary -->
-        <div class="executive-summary">
-            <div class="headline">{{ headline }}</div>
-            <div class="summary-text">{{ executive_summary }}</div>
-            <div class="key-metric">
-                <div class="label">Key Metric</div>
-                <div class="value">{{ key_metric }}</div>
+        <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:30px;">
+            <div style="font-size:22px;font-weight:700;margin-bottom:15px;line-height:1.3;">{{ headline }}</div>
+            <div style="font-size:15px;line-height:1.7;opacity:0.95;">{{ executive_summary }}</div>
+            <div style="margin-top:20px;padding:15px 20px;background:rgba(255,255,255,0.15);border-radius:10px;display:inline-block;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:0.8;">Key Metric</div>
+                <div style="font-size:28px;font-weight:700;">{{ key_metric }}</div>
             </div>
         </div>
 
-        <!-- Overall Performance -->
-        <div class="section">
-            <h2 class="section-title">Overall Performance</h2>
-            <div class="score-cards">
-                <div class="score-card primary">
-                    <div class="score-value">{{ rating }}</div>
-                    <div class="score-label">Average Rating</div>
-                </div>
-                <div class="score-card {% if sentiment_score >= 0.6 %}success{% elif sentiment_score >= 0.3 %}warning{% else %}neutral{% endif %}">
-                    <div class="score-value">{{ (sentiment_score * 100)|round|int }}%</div>
-                    <div class="score-label">Positive Sentiment</div>
-                </div>
-                <div class="score-card {% if trend == 'improving' %}success{% elif trend == 'declining' %}warning{% else %}neutral{% endif %}">
-                    <div class="score-value">{% if trend == 'improving' %}↑{% elif trend == 'declining' %}↓{% else %}→{% endif %}</div>
-                    <div class="score-label">{{ trend|title }} Trend</div>
-                </div>
-                <div class="score-card neutral">
-                    <div class="score-value">{{ review_count }}</div>
-                    <div class="score-label">Reviews Analyzed</div>
-                </div>
-            </div>
+        <!-- Metrics Overview -->
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 20px 0;padding-bottom:10px;border-bottom:3px solid #667eea;display:inline-block;">Overview</h2>
+            <!--[if mso]><table role="presentation" width="100%"><tr><td width="25%" valign="top"><![endif]-->
+            <table role="presentation" style="width:100%;border-collapse:collapse;">
+                <tr>
+                    <td style="width:25%;padding:15px;text-align:center;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border-radius:12px;">
+                        <div style="font-size:32px;font-weight:700;line-height:1;">{{ rating }}</div>
+                        <div style="font-size:12px;margin-top:8px;opacity:0.85;">Avg Rating</div>
+                    </td>
+                    <td style="width:4%;"></td>
+                    <td style="width:21%;padding:15px;text-align:center;background:{% if sentiment_score >= 0.6 %}#e8f5e9;color:#2e7d32{% elif sentiment_score >= 0.3 %}#fff3e0;color:#ef6c00{% else %}#f5f5f5;color:#616161{% endif %};border-radius:12px;">
+                        <div style="font-size:32px;font-weight:700;line-height:1;">{{ (sentiment_score * 100)|round|int }}%</div>
+                        <div style="font-size:12px;margin-top:8px;opacity:0.85;">Positive</div>
+                    </td>
+                    <td style="width:4%;"></td>
+                    <td style="width:21%;padding:15px;text-align:center;background:{% if trend == 'improving' %}#e8f5e9;color:#2e7d32{% elif trend == 'declining' %}#fff3e0;color:#ef6c00{% else %}#f5f5f5;color:#616161{% endif %};border-radius:12px;">
+                        <div style="font-size:32px;font-weight:700;line-height:1;">{% if trend == 'improving' %}&#8593;{% elif trend == 'declining' %}&#8595;{% else %}&#8594;{% endif %}</div>
+                        <div style="font-size:12px;margin-top:8px;opacity:0.85;">{{ trend|title }}</div>
+                    </td>
+                    <td style="width:4%;"></td>
+                    <td style="width:21%;padding:15px;text-align:center;background:#f5f5f5;color:#616161;border-radius:12px;">
+                        <div style="font-size:32px;font-weight:700;line-height:1;">{{ review_count }}</div>
+                        <div style="font-size:12px;margin-top:8px;opacity:0.85;">Reviews</div>
+                    </td>
+                </tr>
+            </table>
 
-            <!-- Sentiment Breakdown -->
-            <h3 style="font-size: 14px; color: #666; margin-bottom: 10px;">Sentiment Breakdown</h3>
-            <div class="sentiment-bar">
-                <div class="positive" style="width: {{ positive_pct }}%"></div>
-                <div class="neutral" style="width: {{ neutral_pct }}%"></div>
-                <div class="negative" style="width: {{ negative_pct }}%"></div>
-            </div>
-            <div class="sentiment-legend">
-                <span><span class="dot positive"></span> Positive {{ positive_pct|round|int }}%</span>
-                <span><span class="dot neutral"></span> Neutral {{ neutral_pct|round|int }}%</span>
-                <span><span class="dot negative"></span> Negative {{ negative_pct|round|int }}%</span>
-            </div>
-        </div>
-
-        <!-- Themes Analysis -->
-        <div class="section">
-            <h2 class="section-title">What Customers Are Saying</h2>
-
-            {% if strengths %}
-            <h3 style="font-size: 14px; color: #4caf50; margin-bottom: 15px;">✓ Your Strengths</h3>
-            <div class="theme-list" style="margin-bottom: 25px;">
-                {% for strength in strengths %}
-                <div class="theme-item strength">
-                    <div class="theme-icon strength">👍</div>
-                    <div class="theme-content">
-                        <div class="theme-name">{{ strength }}</div>
-                        <div class="theme-detail">Customers consistently praise this</div>
-                    </div>
-                </div>
-                {% endfor %}
+            {% if review_count < 5 %}
+            <div style="margin-top:15px;padding:12px 16px;background:#fff3e0;border-radius:8px;font-size:13px;color:#ef6c00;">
+                Note: Analysis is based on only {{ review_count }} review{{ 's' if review_count != 1 else '' }}. Results may be less reliable with a small sample.
             </div>
             {% endif %}
 
-            {% if weaknesses %}
-            <h3 style="font-size: 14px; color: #ff9800; margin-bottom: 15px;">→ Areas for Improvement</h3>
-            <div class="theme-list">
-                {% for weakness in weaknesses %}
-                <div class="theme-item weakness">
-                    <div class="theme-icon weakness">📌</div>
-                    <div class="theme-content">
-                        <div class="theme-name">{{ weakness }}</div>
-                        <div class="theme-detail">Opportunity to improve customer satisfaction</div>
-                    </div>
-                </div>
-                {% endfor %}
+            <!-- Sentiment Breakdown Bar -->
+            <h3 style="font-size:14px;color:#666;margin:20px 0 10px 0;">Sentiment Breakdown</h3>
+            <div style="height:12px;border-radius:6px;overflow:hidden;display:flex;margin:0 0 10px 0;">
+                <div style="background:#4caf50;width:{{ positive_pct }}%;"></div>
+                <div style="background:#9e9e9e;width:{{ neutral_pct }}%;"></div>
+                <div style="background:#f44336;width:{{ negative_pct }}%;"></div>
             </div>
-            {% endif %}
+            <table role="presentation" style="width:100%;font-size:13px;color:#666;">
+                <tr>
+                    <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4caf50;vertical-align:middle;"></span> Positive {{ positive_pct|round|int }}%</td>
+                    <td style="text-align:center;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#9e9e9e;vertical-align:middle;"></span> Neutral {{ neutral_pct|round|int }}%</td>
+                    <td style="text-align:right;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f44336;vertical-align:middle;"></span> Negative {{ negative_pct|round|int }}%</td>
+                </tr>
+            </table>
         </div>
+
+        <!-- What Customers Love -->
+        {% if strength_themes %}
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 20px 0;padding-bottom:10px;border-bottom:3px solid #4caf50;display:inline-block;">What Customers Love</h2>
+
+            {% for theme in strength_themes %}
+            <div style="padding:18px;background:#f8f9fa;border-radius:10px;border-left:4px solid #4caf50;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;color:#1a1a2e;font-size:15px;">{{ theme.name }}</span>
+                    <span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">{{ theme.mention_count }} of {{ review_count }} reviews</span>
+                </div>
+                {% if theme.example_quotes %}
+                {% for quote in theme.example_quotes[:2] %}
+                <div style="font-size:13px;color:#555;font-style:italic;padding:8px 0 0 12px;border-left:2px solid #e0e0e0;margin-top:6px;">"{{ quote|truncate(200) }}"</div>
+                {% endfor %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- What Needs Attention -->
+        {% if weakness_themes %}
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 20px 0;padding-bottom:10px;border-bottom:3px solid #ff9800;display:inline-block;">What Needs Attention</h2>
+
+            {% for theme in weakness_themes %}
+            <div style="padding:18px;background:#f8f9fa;border-radius:10px;border-left:4px solid #ff9800;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;color:#1a1a2e;font-size:15px;">{{ theme.name }}</span>
+                    <span style="background:#fff3e0;color:#ef6c00;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">{{ theme.mention_count }} of {{ review_count }} reviews</span>
+                </div>
+                {% if theme.example_quotes %}
+                {% for quote in theme.example_quotes[:2] %}
+                <div style="font-size:13px;color:#555;font-style:italic;padding:8px 0 0 12px;border-left:2px solid #e0e0e0;margin-top:6px;">"{{ quote|truncate(200) }}"</div>
+                {% endfor %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         <!-- Competitive Position -->
-        <div class="section">
-            <h2 class="section-title">Competitive Position</h2>
-            <div class="competitor-card">
-                <div class="competitor-header">
+        {% if competitor_comparisons or competitive_advantages or competitive_gaps %}
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 20px 0;padding-bottom:10px;border-bottom:3px solid #667eea;display:inline-block;">Competitive Position</h2>
+
+            <!-- Market position badge -->
+            <div style="background:#f8f9fa;border-radius:12px;padding:20px;margin-bottom:15px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
                     <div>
-                        <strong style="color: #1a1a2e;">Market Standing</strong>
-                        <div style="font-size: 13px; color: #666;">vs. {{ competitor_count }} local competitors</div>
+                        <strong style="color:#1a1a2e;">Market Standing</strong>
+                        <div style="font-size:13px;color:#666;">vs. {{ competitor_count }} local competitors</div>
                     </div>
-                    <div class="market-position {{ market_position }}">{{ market_position|title }}</div>
+                    <span style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase;{% if market_position == 'leader' %}background:#e8f5e9;color:#2e7d32;{% elif market_position == 'competitive' %}background:#e3f2fd;color:#1565c0;{% elif market_position == 'lagging' %}background:#ffebee;color:#c62828;{% else %}background:#f5f5f5;color:#616161;{% endif %}">{{ market_position|title }}</span>
                 </div>
 
                 {% if competitive_advantages %}
-                <div class="advantages-list">
-                    <strong style="font-size: 13px; color: #4caf50;">Your Advantages:</strong>
-                    <ul style="margin-top: 8px;">
-                        {% for advantage in competitive_advantages[:3] %}
-                        <li>{{ advantage }}</li>
+                <div style="margin-top:10px;">
+                    <strong style="font-size:13px;color:#4caf50;">Your Advantages:</strong>
+                    <ul style="margin:8px 0 0 0;padding:0;list-style:none;">
+                        {% for adv in competitive_advantages[:3] %}
+                        <li style="padding:6px 0 6px 20px;position:relative;font-size:14px;color:#444;"><span style="position:absolute;left:0;color:#4caf50;font-weight:bold;">&#10003;</span> {{ adv }}</li>
                         {% endfor %}
                     </ul>
                 </div>
                 {% endif %}
 
                 {% if competitive_gaps %}
-                <div class="gaps-list" style="margin-top: 15px;">
-                    <strong style="font-size: 13px; color: #ff9800;">Watch Out For:</strong>
-                    <ul style="margin-top: 8px;">
-                        {% for gap in competitive_gaps[:2] %}
-                        <li>{{ gap }}</li>
+                <div style="margin-top:12px;">
+                    <strong style="font-size:13px;color:#ff9800;">Gaps to Close:</strong>
+                    <ul style="margin:8px 0 0 0;padding:0;list-style:none;">
+                        {% for gap in competitive_gaps[:3] %}
+                        <li style="padding:6px 0 6px 20px;position:relative;font-size:14px;color:#444;"><span style="position:absolute;left:0;color:#ff9800;">&#8594;</span> {{ gap }}</li>
                         {% endfor %}
                     </ul>
                 </div>
                 {% endif %}
             </div>
+
+            <!-- Named competitor cards -->
+            {% if competitor_comparisons %}
+            {% for comp in competitor_comparisons[:3] %}
+            <div style="background:#f8f9fa;border-radius:10px;padding:16px;margin-bottom:10px;border-left:4px solid #667eea;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:700;color:#1a1a2e;">{{ comp.competitor_name }}</span>
+                    {% if comp.competitor_rating %}
+                    <span style="background:#e3f2fd;color:#1565c0;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">{{ comp.competitor_rating }} stars</span>
+                    {% endif %}
+                </div>
+                {% if comp.strengths_vs_competitor %}
+                <div style="font-size:13px;color:#2e7d32;margin-top:8px;">You beat them: {{ comp.strengths_vs_competitor|join(', ') }}</div>
+                {% endif %}
+                {% if comp.weaknesses_vs_competitor %}
+                <div style="font-size:13px;color:#ef6c00;margin-top:4px;">They beat you: {{ comp.weaknesses_vs_competitor|join(', ') }}</div>
+                {% endif %}
+                {% if comp.opportunity %}
+                <div style="font-size:13px;color:#1565c0;margin-top:4px;font-style:italic;">Opportunity: {{ comp.opportunity }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
         </div>
+        {% endif %}
 
         <!-- Key Insights -->
-        <div class="section">
-            <h2 class="section-title">Key Insights</h2>
-            <div class="insight-list">
-                {% for insight in insights[:5] %}
-                <div class="insight-item">
-                    <div class="priority-badge {{ insight.priority }}">{{ loop.index }}</div>
-                    <div class="insight-title">{{ insight.title }}</div>
-                    <div class="insight-text">{{ insight.description }}</div>
-                </div>
-                {% endfor %}
+        {% if insights %}
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 20px 0;padding-bottom:10px;border-bottom:3px solid #667eea;display:inline-block;">Key Insights</h2>
+
+            {% for insight in insights[:5] %}
+            <div style="padding:18px;background:#f8f9fa;border-radius:10px;margin-bottom:12px;position:relative;padding-left:55px;">
+                <div style="position:absolute;left:15px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;text-align:center;line-height:28px;{% if insight.priority == 'high' %}background:linear-gradient(135deg,#f44336 0%,#e91e63 100%);{% elif insight.priority == 'low' %}background:linear-gradient(135deg,#4caf50 0%,#8bc34a 100%);{% else %}background:linear-gradient(135deg,#ff9800 0%,#ffc107 100%);{% endif %}">{{ loop.index }}</div>
+                <div style="font-weight:600;color:#1a1a2e;margin-bottom:4px;">{{ insight.title }}</div>
+                <div style="font-size:14px;color:#555;">{{ insight.description }}</div>
             </div>
+            {% endfor %}
         </div>
+        {% endif %}
 
         <!-- Recommendations -->
-        <div class="section">
-            <h2 class="section-title">Recommended Actions</h2>
-            <div class="recommendation-list">
-                {% for rec in recommendations[:5] %}
-                <div class="recommendation-item">
-                    <div class="priority-badge {{ rec.priority }}">{{ loop.index }}</div>
-                    <div class="recommendation-title">{{ rec.title }}</div>
-                    <div class="recommendation-text">{{ rec.description }}</div>
-                </div>
-                {% endfor %}
+        {% if recommendations %}
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 20px 0;padding-bottom:10px;border-bottom:3px solid #667eea;display:inline-block;">Recommended Actions</h2>
+
+            {% for rec in recommendations[:5] %}
+            <div style="padding:18px;background:#f8f9fa;border-radius:10px;margin-bottom:12px;position:relative;padding-left:55px;">
+                <div style="position:absolute;left:15px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;text-align:center;line-height:28px;{% if rec.priority == 'high' %}background:linear-gradient(135deg,#f44336 0%,#e91e63 100%);{% elif rec.priority == 'low' %}background:linear-gradient(135deg,#4caf50 0%,#8bc34a 100%);{% else %}background:linear-gradient(135deg,#ff9800 0%,#ffc107 100%);{% endif %}">{{ loop.index }}</div>
+                <div style="font-weight:600;color:#1a1a2e;margin-bottom:4px;">{{ rec.title }}</div>
+                <div style="font-size:14px;color:#555;">{{ rec.description }}</div>
             </div>
+            {% endfor %}
 
             {% if quick_wins %}
-            <div class="quick-wins">
-                <h3>⚡ Quick Wins - Implement This Week</h3>
-                <ul>
+            <div style="background:linear-gradient(135deg,#4caf50 0%,#8bc34a 100%);color:white;border-radius:12px;padding:25px;margin-top:20px;">
+                <h3 style="font-size:16px;margin:0 0 15px 0;">Quick Wins - Do This Week</h3>
+                <ul style="list-style:none;margin:0;padding:0;">
                     {% for win in quick_wins[:3] %}
-                    <li>{{ win }}</li>
+                    <li style="padding:10px 0 10px 25px;position:relative;{% if not loop.last %}border-bottom:1px solid rgba(255,255,255,0.2);{% endif %}"><span style="position:absolute;left:0;">&#9889;</span> {{ win }}</li>
                     {% endfor %}
                 </ul>
             </div>
             {% endif %}
         </div>
+        {% endif %}
 
         <!-- Footer -->
-        <div class="footer">
-            <div class="footer-logo">LocalPulse</div>
-            <div class="footer-text">AI-Powered Business Intelligence</div>
-            <div class="footer-links">
-                Generated on {{ generated_at }} | Questions? Reply to this email
-            </div>
+        <div style="background:#1a1a2e;color:white;padding:30px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;margin-bottom:10px;">LocalPulse</div>
+            <div style="font-size:13px;opacity:0.7;margin-bottom:15px;">AI-Powered Business Intelligence</div>
+            <div style="font-size:12px;opacity:0.5;">Generated on {{ generated_at }} | Questions? Reply to this email</div>
         </div>
     </div>
 </body>
@@ -826,6 +389,15 @@ async def prepare_report_data(state: ReportState) -> dict:
     # Get theme data
     theme_data = theme_results[0] if theme_results else {}
 
+    # Separate themes into strengths and weaknesses with full data
+    all_themes = theme_data.get("themes", [])
+    strength_themes = [t for t in all_themes if t.get("is_strength", True)]
+    weakness_themes = [t for t in all_themes if not t.get("is_strength", True)]
+
+    # Sort by mention count descending
+    strength_themes.sort(key=lambda t: t.get("mention_count", 0), reverse=True)
+    weakness_themes.sort(key=lambda t: t.get("mention_count", 0), reverse=True)
+
     # Prepare report data structure
     report_data = {
         "business_name": sentiment_results.get("business_name", "Your Business"),
@@ -838,11 +410,14 @@ async def prepare_report_data(state: ReportState) -> dict:
         "neutral_count": sentiment_results.get("neutral_count", 0),
         "strengths": theme_data.get("top_strengths", []),
         "weaknesses": theme_data.get("top_weaknesses", []),
-        "themes": theme_data.get("themes", []),
+        "themes": all_themes,
+        "strength_themes": strength_themes[:5],
+        "weakness_themes": weakness_themes[:5],
         "market_position": competitor_analysis.get("market_position", "competitive"),
         "competitor_count": len(competitor_analysis.get("competitors", [])),
         "competitive_advantages": competitor_analysis.get("competitive_advantages", []),
         "competitive_gaps": competitor_analysis.get("competitive_gaps", []),
+        "competitor_comparisons": competitor_analysis.get("comparisons", []),
         "insights": insights,
         "recommendations": recommendations,
         "quick_wins": sentiment_results.get("quick_wins", []),
@@ -1081,12 +656,13 @@ async def render_html_report(state: ReportState) -> dict:
             "positive_pct": report_data.get("positive_pct", 0),
             "neutral_pct": report_data.get("neutral_pct", 0),
             "negative_pct": report_data.get("negative_pct", 0),
-            "strengths": report_data.get("strengths", [])[:3],
-            "weaknesses": report_data.get("weaknesses", [])[:3],
+            "strength_themes": report_data.get("strength_themes", []),
+            "weakness_themes": report_data.get("weakness_themes", []),
             "market_position": report_data.get("market_position", "competitive"),
             "competitor_count": report_data.get("competitor_count", 0),
             "competitive_advantages": report_data.get("competitive_advantages", [])[:3],
-            "competitive_gaps": report_data.get("competitive_gaps", [])[:2],
+            "competitive_gaps": report_data.get("competitive_gaps", [])[:3],
+            "competitor_comparisons": report_data.get("competitor_comparisons", []),
             "insights": insights_for_template,
             "recommendations": recommendations_for_template,
             "quick_wins": report_data.get("quick_wins", [])[:3],

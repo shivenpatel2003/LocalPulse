@@ -30,6 +30,7 @@ from src.graphs.state import CollectionState, CollectionStatus, create_collectio
 from src.knowledge import EmbeddingsService  # Uses Cohere (free tier)
 from src.knowledge.neo4j_client import Neo4jClient
 from src.knowledge.pinecone_client import PineconeClient
+from src.services.outscraper_service import OutscraperService
 
 logger = structlog.get_logger(__name__)
 
@@ -156,7 +157,9 @@ async def get_business_details(state: CollectionState) -> dict:
 async def collect_reviews(state: CollectionState) -> dict:
     """Collect reviews for the business.
 
-    Fetches all available reviews from Google Places (up to 5 per API limits).
+    Tries Outscraper first (up to 30 reviews) for richer data.
+    Falls back to Google Places API (up to 5 reviews) if Outscraper
+    is not configured or fails.
 
     Args:
         state: Current state with google_place_id.
@@ -170,6 +173,43 @@ async def collect_reviews(state: CollectionState) -> dict:
 
     logger.info("collection_get_reviews", place_id=google_place_id)
 
+    # Try Outscraper first for richer review data
+    outscraper = OutscraperService()
+    if outscraper.is_configured:
+        try:
+            # Build query from business name (better results than place_id)
+            business_name = state.get("business_name", "")
+            # Also try with the place_id stripped of "places/" prefix
+            query = business_name if business_name else google_place_id.replace("places/", "")
+
+            reviews = await outscraper.fetch_reviews(
+                query=query,
+                limit=30,
+                sort="newest_first",
+            )
+
+            if reviews:
+                # Add business context to each review
+                for review in reviews:
+                    review["business_id"] = state.get("business_id")
+                    review["google_place_id"] = google_place_id
+
+                logger.info(
+                    "collection_reviews_fetched",
+                    source="outscraper",
+                    count=len(reviews),
+                )
+                return {"reviews_collected": reviews}
+
+            logger.info("collection_outscraper_empty_fallback_to_google")
+
+        except Exception as e:
+            logger.warning(
+                "collection_outscraper_failed_fallback",
+                error=str(e),
+            )
+
+    # Fallback: Google Places API (max 5 reviews)
     try:
         async with GooglePlacesCollector() as collector:
             reviews = await collector.get_place_reviews(google_place_id)
@@ -178,7 +218,6 @@ async def collect_reviews(state: CollectionState) -> dict:
                 logger.info("collection_no_reviews", place_id=google_place_id)
                 return {}
 
-            # Format reviews with metadata
             review_records = []
             for review in reviews:
                 review_record = {
@@ -192,18 +231,18 @@ async def collect_reviews(state: CollectionState) -> dict:
                     "language": review.get("language"),
                     "time": review.get("time"),
                     "platform": "google",
+                    "source": "google_places",
                     "collected_at": datetime.now(timezone.utc).isoformat(),
                 }
                 review_records.append(review_record)
 
             logger.info(
                 "collection_reviews_fetched",
+                source="google_places",
                 count=len(review_records),
             )
 
-            return {
-                "reviews_collected": review_records,
-            }
+            return {"reviews_collected": review_records}
 
     except GooglePlacesError as e:
         logger.error("collection_reviews_failed", error=str(e))
@@ -271,6 +310,65 @@ async def find_competitors(state: CollectionState) -> dict:
         return {
             "errors": [f"Competitor search failed: {str(e)}"],
         }
+
+
+async def collect_competitor_reviews(state: CollectionState) -> dict:
+    """Fetch reviews for top competitors via Outscraper.
+
+    Enriches competitor records with review data for better analysis.
+    Only runs if Outscraper is configured. Fetches reviews for top 3
+    competitors to conserve free tier budget.
+
+    Args:
+        state: Current state with competitors_found.
+
+    Returns:
+        Partial state update with enriched competitors_found.
+    """
+    competitors = state.get("competitors_found", [])
+    if not competitors:
+        return {}
+
+    outscraper = OutscraperService()
+    if not outscraper.is_configured:
+        logger.info("collection_competitor_reviews_skip", reason="outscraper_not_configured")
+        return {}
+
+    logger.info(
+        "collection_competitor_reviews_start",
+        competitor_count=len(competitors),
+    )
+
+    try:
+        enriched = await outscraper.fetch_competitor_reviews(
+            competitors=competitors,
+            reviews_per_competitor=15,
+            max_competitors=3,
+        )
+
+        # Replace competitors_found entirely (enriched includes all)
+        # We return it as a fresh list, not appended, by using a trick:
+        # Clear existing and set new. Since competitors_found uses merge_lists,
+        # we need to work around it. Store enriched data in reviews_collected
+        # as a metadata record that master_graph can pick up.
+        enriched_meta = {
+            "type": "competitor_reviews_meta",
+            "competitors_with_reviews": enriched,
+            "collected_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        logger.info(
+            "collection_competitor_reviews_complete",
+            enriched_count=sum(1 for c in enriched if c.get("reviews")),
+        )
+
+        return {
+            "reviews_collected": [enriched_meta],
+        }
+
+    except Exception as e:
+        logger.error("collection_competitor_reviews_failed", error=str(e))
+        return {}
 
 
 async def store_in_neo4j(state: CollectionState) -> dict:
@@ -573,6 +671,7 @@ def create_collection_graph() -> StateGraph:
     workflow.add_node("get_business_details", get_business_details)
     workflow.add_node("collect_reviews", collect_reviews)
     workflow.add_node("find_competitors", find_competitors)
+    workflow.add_node("collect_competitor_reviews", collect_competitor_reviews)
     workflow.add_node("store_in_neo4j", store_in_neo4j)
     workflow.add_node("store_embeddings", store_embeddings)
 
@@ -592,7 +691,8 @@ def create_collection_graph() -> StateGraph:
     # Add sequential edges for the rest of the workflow
     workflow.add_edge("get_business_details", "collect_reviews")
     workflow.add_edge("collect_reviews", "find_competitors")
-    workflow.add_edge("find_competitors", "store_in_neo4j")
+    workflow.add_edge("find_competitors", "collect_competitor_reviews")
+    workflow.add_edge("collect_competitor_reviews", "store_in_neo4j")
     workflow.add_edge("store_in_neo4j", "store_embeddings")
     workflow.add_edge("store_embeddings", END)
 

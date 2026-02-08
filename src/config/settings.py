@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Outscraper (Review Data)
+    # -------------------------------------------------------------------------
+    outscraper_api_key: SecretStr | None = Field(
+        default=None, description="Outscraper API key for Google Reviews"
+    )
+
+    # -------------------------------------------------------------------------
     # Redis (Caching / Working Memory)
     # -------------------------------------------------------------------------
     redis_url: str | None = Field(default=None, description="Redis connection URL")

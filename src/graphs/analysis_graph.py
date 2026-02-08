@@ -131,17 +131,25 @@ class CompetitorComparison(BaseModel):
     """Comparison with a single competitor."""
 
     competitor_name: str = Field(description="Name of the competitor")
+    competitor_rating: float = Field(
+        description="The competitor's star rating",
+        default=0.0,
+    )
     rating_difference: float = Field(
         description="Rating difference (positive means client is higher)",
         default=0.0,
     )
     strengths_vs_competitor: list[str] = Field(
-        description="Areas where client outperforms this competitor",
+        description="Specific areas where client outperforms this competitor",
         default_factory=list,
     )
     weaknesses_vs_competitor: list[str] = Field(
-        description="Areas where competitor outperforms client",
+        description="Specific areas where competitor outperforms client",
         default_factory=list,
+    )
+    opportunity: str = Field(
+        description="One specific opportunity the client can exploit based on this competitor's weaknesses",
+        default="",
     )
 
 
@@ -233,30 +241,23 @@ class RecommendationsResult(BaseModel):
 SENTIMENT_ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert hospitality industry analyst specializing in customer sentiment analysis.
-Your task is to analyze restaurant reviews and determine the sentiment of each review.
+        """You are an expert hospitality analyst. Analyze restaurant reviews with precision.
 
-Guidelines:
-- Consider the overall tone, specific praise or complaints, and emotional language
-- A score of 1.0 means extremely positive, -1.0 means extremely negative, 0 is neutral
-- Look for nuance - a review can mention both positives and negatives
-- Identify key phrases that drive the sentiment
-- Assess the trend based on review dates if available (most recent reviews indicate current direction)
-
-Be objective and precise in your analysis.""",
+Rules:
+- Score each review from -1.0 (very negative) to 1.0 (very positive)
+- Extract the SPECIFIC phrases from each review that drive sentiment (not generic descriptions - use the reviewer's actual words)
+- For the trend, compare sentiment of newer vs older reviews if dates are available
+- A "mixed" review praises some things and criticizes others - score it based on the overall weight
+- Be precise: "excellent black daal" is a key phrase, not "food quality".""",
     ),
     (
         "human",
-        """Analyze the sentiment of the following reviews for {business_name}:
+        """Analyze sentiment for these {review_count} reviews of {business_name}:
 
 {reviews_text}
 
-Provide a comprehensive sentiment analysis including:
-1. Individual sentiment for each review with scores and key phrases
-2. Overall aggregated sentiment score
-3. Counts of positive, negative, and neutral reviews
-4. Whether sentiment is improving, declining, or stable
-5. A brief summary of the findings""",
+For each review: sentiment label, score, and the specific phrases (quoted from the review) that drive the sentiment.
+Then: overall score, counts by category, trend direction, and a 2-sentence summary.""",
     ),
 ])
 
@@ -264,34 +265,38 @@ Provide a comprehensive sentiment analysis including:
 THEME_EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert hospitality industry analyst specializing in identifying customer experience themes.
-Your task is to extract recurring themes from restaurant reviews.
+        """You are an expert hospitality analyst extracting SPECIFIC themes from restaurant reviews.
 
-Common theme categories in hospitality:
-- food_quality: Taste, freshness, presentation, portion sizes
-- service: Staff attentiveness, friendliness, professionalism
-- ambiance: Atmosphere, decor, noise level, comfort
-- value: Price-to-quality ratio, value for money
-- cleanliness: Hygiene, tidiness of venue
-- location: Accessibility, parking, neighborhood
-- menu: Variety, dietary options, seasonal offerings
-- staff: Individual staff members, management
-- wait_time: Speed of service, reservations, queues
+CRITICAL: Be specific, not generic.
+- BAD: "Food Quality" mentioned 5 times
+- GOOD: "Black Daal" mentioned in 12 of 30 reviews, "Lamb Biryani" in 7, "Bacon Naan Roll" in 6
 
-Identify both strengths (positive themes) and weaknesses (negative themes).
-Include specific quotes as evidence.""",
+Rules:
+1. Name themes by the SPECIFIC item, dish, or issue mentioned - not generic categories
+2. Count EXACTLY how many reviews mention each theme out of the total
+3. For each theme, pull 2-3 DIRECT QUOTES from the actual reviews (copy the reviewer's words exactly)
+4. Calculate per-theme sentiment: a restaurant can have amazing food sentiment but terrible wait time sentiment
+5. Flag any EMERGING themes that appear only in the most recent reviews but not older ones
+6. Categories are for grouping only - the theme NAME must be specific (e.g., "Weekend brunch wait times" not "wait_time")
+
+Theme categories for grouping: food_quality, service, ambiance, value, cleanliness, location, menu, staff, wait_time, other.""",
     ),
     (
         "human",
-        """Extract themes from the following reviews for {business_name}:
+        """Extract specific themes from these {review_count} reviews of {business_name}:
 
 {reviews_text}
 
-Identify:
-1. All recurring themes with mention counts and sentiment
-2. Which themes are strengths vs weaknesses
-3. Example quotes for each theme
-4. Top 3 strengths and top 3 areas for improvement""",
+For each theme found:
+- Specific name (the actual dish, service aspect, or issue)
+- Category for grouping
+- Exact mention count out of {review_count} reviews
+- Per-theme sentiment score
+- Whether it's a strength or weakness
+- 2-3 direct quotes from reviewers (copy their exact words)
+
+Then list top 3 specific strengths and top 3 specific areas needing improvement.
+Write a 2-sentence summary focused on what makes this business distinctive.""",
     ),
 ])
 
@@ -299,35 +304,35 @@ Identify:
 COMPETITOR_ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert hospitality industry analyst specializing in competitive intelligence.
-Your task is to compare a restaurant's performance against its competitors.
+        """You are an expert hospitality analyst producing NAMED competitive intelligence.
 
-Focus on:
-- Rating comparisons (quantitative)
-- Qualitative differences in customer feedback themes
-- Unique selling points and competitive advantages
-- Areas where competitors excel
+CRITICAL: Name every competitor explicitly and compare with specifics.
+- BAD: "Competitors tend to have better service"
+- GOOD: "Gunpowder (4.3 stars): customers praise their cocktail menu and small plates, but complain about portion sizes. Opportunity: you're not mentioned for drinks - consider promoting your cocktail offering."
 
-Be specific and actionable in your comparisons.""",
+Rules:
+1. Name each competitor and their rating
+2. If competitor reviews are provided, cite what THEIR customers say (actual themes and quotes)
+3. Identify specific gaps: things competitors are praised for that the client is not mentioned for
+4. Identify specific advantages: things the client excels at that competitors don't
+5. Be blunt about market position - don't sugar-coat if the client is lagging""",
     ),
     (
         "human",
-        """Compare {business_name} against its competitors:
+        """Compare {business_name} (rating: {client_rating}) against competitors.
 
-Client Business:
-- Name: {business_name}
-- Rating: {client_rating}
-- Key Themes: {client_themes}
-- Review Summary: {client_summary}
+Client's key themes: {client_themes}
+Client review summary: {client_summary}
 
-Competitors:
+Competitors with data:
 {competitors_text}
 
-Provide:
-1. Detailed comparison with each competitor
-2. Overall market position assessment
-3. Key competitive advantages
-4. Areas where competitors have an edge""",
+For each named competitor:
+1. Their rating and what their customers say (if reviews provided)
+2. Where {business_name} beats them and where they beat {business_name}
+3. Specific opportunity the client could exploit
+
+Then: overall market position, top 3 competitive advantages, top 3 gaps to close.""",
     ),
 ])
 
@@ -335,39 +340,29 @@ Provide:
 INSIGHTS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are a senior hospitality consultant generating actionable business insights.
-Your task is to synthesize analysis results into clear, impactful insights.
+        """You are a senior hospitality consultant. Generate insights backed by SPECIFIC DATA from the analysis.
 
-Insight categories:
-- opportunity: Untapped potential or market gaps
-- risk: Issues that could harm the business if not addressed
-- trend: Emerging patterns in customer behavior or preferences
-- competitive: Insights about competitive positioning
-- operational: Efficiency or process-related insights
+CRITICAL: Every insight must cite specific numbers, quotes, or competitor names.
+- BAD: "Customer service could be improved"
+- GOOD: "3 of your 5 negative reviews specifically mention weekend brunch wait times exceeding 30 minutes. Your competitor Dishoom has a booking system that avoids this."
 
-Each insight should be:
-- Specific and data-driven
-- Actionable for a restaurant owner
-- Prioritized by potential impact""",
+Categories: opportunity, risk, trend, competitive, operational.
+Each insight needs: a specific title, evidence-backed description, impact level, and the supporting data points.""",
     ),
     (
         "human",
-        """Generate insights for {business_name} based on this analysis:
+        """Generate data-backed insights for {business_name}:
 
-Sentiment Analysis:
-{sentiment_summary}
+Sentiment: {sentiment_summary}
+Themes: {theme_summary}
+Competitive Position: {competitor_summary}
 
-Theme Analysis:
-{theme_summary}
-
-Competitive Position:
-{competitor_summary}
-
-Generate 5-7 key insights with:
-1. Clear titles and descriptions
-2. Impact assessment (high/medium/low)
-3. Supporting data points
-4. An executive summary""",
+Generate 5-7 insights. Every insight MUST include:
+1. Specific title (not generic)
+2. Description citing exact data (review counts, specific dishes, named competitors)
+3. Impact level (high/medium/low)
+4. 2-3 supporting data points from the analysis above
+5. A 2-3 sentence executive summary of the most important finding""",
     ),
 ])
 
@@ -375,42 +370,36 @@ Generate 5-7 key insights with:
 RECOMMENDATIONS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are a hospitality business consultant creating actionable recommendations.
-Your task is to convert insights into specific, implementable recommendations.
+        """You are a hospitality consultant giving SPECIFIC, data-backed recommendations.
 
-Recommendation categories:
-- service: Customer service improvements
-- menu: Menu changes or additions
-- marketing: Promotional or branding activities
-- operations: Process and efficiency improvements
-- staff: Training or staffing recommendations
-- ambiance: Atmosphere or decor changes
-- value: Pricing or value proposition adjustments
+CRITICAL: Recommendations must reference actual data from the analysis.
+- BAD: "Enhance customer service training"
+- GOOD: "Your 1-star reviews both mention weekend brunch wait times. Consider implementing a booking system for Saturday/Sunday before 2pm. Competitor Dishoom uses ResDiary and their wait time complaints dropped."
 
-Each recommendation should include:
-- Concrete implementation steps
-- Expected outcomes
-- Priority level based on impact and effort""",
+Rules:
+1. Each recommendation must cite the specific review data that motivates it
+2. Implementation steps must be concrete actions, not vague suggestions
+3. Expected outcomes should be measurable where possible
+4. Quick wins = things you can do THIS WEEK. Not "improve training over time."
+
+Categories: service, menu, marketing, operations, staff, ambiance, value.""",
     ),
     (
         "human",
-        """Create recommendations for {business_name} based on these insights:
+        """Create specific recommendations for {business_name}:
 
-Key Insights:
-{insights_text}
+Insights: {insights_text}
+Strengths to leverage: {strengths}
+Weaknesses to fix: {weaknesses}
 
-Strengths to Leverage:
-{strengths}
+Generate 5-8 recommendations. For each:
+1. Specific title referencing the actual issue
+2. What the data says (cite review counts, quotes, competitor names)
+3. Exactly what to do (concrete steps, not platitudes)
+4. What success looks like (measurable outcome)
+5. Priority: high/medium/low
 
-Weaknesses to Address:
-{weaknesses}
-
-Generate 5-8 specific recommendations including:
-1. High-priority quick wins (can implement this week)
-2. Medium-term improvements (1-3 months)
-3. Strategic initiatives (3+ months)
-
-For each recommendation, provide clear implementation steps.""",
+Separate into: quick wins (this week), medium-term (1-3 months), strategic (3+ months).""",
     ),
 ])
 
@@ -553,11 +542,15 @@ async def analyze_sentiment(state: AnalysisState) -> dict:
     logger.info("analysis_sentiment_start", review_count=len(reviews))
 
     try:
-        # Format reviews for the prompt
-        reviews_text = "\n\n".join([
-            f"Review {i+1} (ID: {r.get('id', f'review_{i}')}, Rating: {r.get('rating', 'N/A')}/5):\n\"{r.get('text', 'No text')}\""
-            for i, r in enumerate(reviews)
-        ])
+        # Format reviews for the prompt - include date if available
+        review_lines = []
+        for i, r in enumerate(reviews):
+            date_str = r.get("time", "")
+            date_part = f", Date: {date_str}" if date_str else ""
+            review_lines.append(
+                f"Review {i+1} (Rating: {r.get('rating', 'N/A')}/5{date_part}):\n\"{r.get('text', 'No text')}\""
+            )
+        reviews_text = "\n\n".join(review_lines)
 
         llm = _get_llm()
         structured_llm = llm.with_structured_output(SentimentAnalysisResult)
@@ -565,6 +558,7 @@ async def analyze_sentiment(state: AnalysisState) -> dict:
         prompt = SENTIMENT_ANALYSIS_PROMPT.format(
             business_name=business_name,
             reviews_text=reviews_text,
+            review_count=len(reviews),
         )
 
         result: SentimentAnalysisResult = await structured_llm.ainvoke(prompt)
@@ -622,11 +616,15 @@ async def extract_themes(state: AnalysisState) -> dict:
     logger.info("analysis_themes_start", review_count=len(reviews))
 
     try:
-        # Format reviews for the prompt
-        reviews_text = "\n\n".join([
-            f"Review {i+1} (Rating: {r.get('rating', 'N/A')}/5):\n\"{r.get('text', 'No text')}\""
-            for i, r in enumerate(reviews)
-        ])
+        # Format reviews for the prompt - include date for emerging theme detection
+        review_lines = []
+        for i, r in enumerate(reviews):
+            date_str = r.get("time", "")
+            date_part = f", Date: {date_str}" if date_str else ""
+            review_lines.append(
+                f"Review {i+1} (Rating: {r.get('rating', 'N/A')}/5{date_part}):\n\"{r.get('text', 'No text')}\""
+            )
+        reviews_text = "\n\n".join(review_lines)
 
         llm = _get_llm()
         structured_llm = llm.with_structured_output(ThemeAnalysisResult)
@@ -634,6 +632,7 @@ async def extract_themes(state: AnalysisState) -> dict:
         prompt = THEME_EXTRACTION_PROMPT.format(
             business_name=business_name,
             reviews_text=reviews_text,
+            review_count=len(reviews),
         )
 
         result: ThemeAnalysisResult = await structured_llm.ainvoke(prompt)
@@ -700,14 +699,26 @@ async def compare_competitors(state: AnalysisState) -> dict:
 
         sentiment_summary = state.get("sentiment_results", {}).get("summary", "No sentiment data")
 
-        # Format competitors
-        competitors_text = "\n\n".join([
-            f"Competitor: {c.get('name', 'Unknown')}\n"
-            f"- Rating: {c.get('rating', 'N/A')}\n"
-            f"- Address: {c.get('address', 'N/A')}\n"
-            f"- Type: {c.get('primary_type', 'N/A')}"
-            for c in competitors[:10]  # Limit to top 10
-        ])
+        # Format competitors with review data if available
+        comp_texts = []
+        for c in competitors[:10]:
+            comp_str = (
+                f"Competitor: {c.get('name', 'Unknown')}\n"
+                f"- Rating: {c.get('rating', 'N/A')}\n"
+                f"- Address: {c.get('address', 'N/A')}\n"
+                f"- Type: {c.get('primary_type', 'N/A')}"
+            )
+            # Include competitor reviews if available (from Outscraper)
+            comp_reviews = c.get("reviews", [])
+            if comp_reviews:
+                comp_str += f"\n- Reviews analyzed: {len(comp_reviews)}"
+                sample_reviews = comp_reviews[:5]  # Top 5 for context
+                for i, r in enumerate(sample_reviews, 1):
+                    text = (r.get("text") or "")[:200]
+                    rating = r.get("rating", "N/A")
+                    comp_str += f'\n  Review {i} ({rating}/5): "{text}"'
+            comp_texts.append(comp_str)
+        competitors_text = "\n\n".join(comp_texts)
 
         llm = _get_llm()
         structured_llm = llm.with_structured_output(CompetitorAnalysisResult)
