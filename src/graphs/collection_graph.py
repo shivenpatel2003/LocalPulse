@@ -280,6 +280,32 @@ async def find_competitors(state: CollectionState) -> dict:
                 logger.info("collection_no_competitors", place_id=google_place_id)
                 return {}
 
+            # Filter out the client business itself and its other branches
+            client_name = (state.get("business_name") or "").lower().strip()
+            # Extract the brand name (first word(s) before location qualifiers)
+            client_brand = client_name.split(",")[0].strip()
+
+            filtered = []
+            for comp in competitors:
+                comp_name = (comp.get("name") or "").lower().strip()
+                # Skip if competitor name is a substring of client name or vice versa
+                if comp_name and client_brand and (
+                    comp_name in client_name
+                    or client_brand in comp_name
+                ):
+                    logger.info(
+                        "collection_competitor_self_filtered",
+                        competitor=comp.get("name"),
+                        client=state.get("business_name"),
+                    )
+                    continue
+                filtered.append(comp)
+            competitors = filtered
+
+            if not competitors:
+                logger.info("collection_no_competitors_after_filter", place_id=google_place_id)
+                return {}
+
             # Format competitor records
             competitor_records = []
             for comp in competitors:

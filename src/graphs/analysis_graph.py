@@ -82,15 +82,15 @@ class SentimentAnalysisResult(BaseModel):
 class Theme(BaseModel):
     """A recurring theme identified in reviews."""
 
-    name: str = Field(description="Theme name (e.g., 'Food Quality', 'Service Speed')")
+    name: str = Field(description="Theme name (e.g., 'Friendly Staff', 'Wait Times', 'Product Quality')")
     category: Literal[
-        "food_quality",
+        "product_quality",
         "service",
-        "ambiance",
+        "environment",
         "value",
         "cleanliness",
         "location",
-        "menu",
+        "offerings",
         "staff",
         "wait_time",
         "other",
@@ -207,7 +207,7 @@ class Recommendation(BaseModel):
         description="Implementation priority"
     )
     category: Literal[
-        "service", "menu", "marketing", "operations", "staff", "ambiance", "value"
+        "service", "offerings", "marketing", "operations", "staff", "environment", "value"
     ] = Field(description="Recommendation category")
     expected_outcome: str = Field(
         description="Expected outcome if implemented"
@@ -239,14 +239,14 @@ class RecommendationsResult(BaseModel):
 SENTIMENT_ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert hospitality analyst. Analyze restaurant reviews with precision.
+        """You are an expert business review analyst. Analyze customer reviews with precision for any type of business.
 
 Rules:
 - Score each review from -1.0 (very negative) to 1.0 (very positive)
 - Extract the SPECIFIC phrases from each review that drive sentiment (not generic descriptions - use the reviewer's actual words)
 - For the trend, compare sentiment of newer vs older reviews if dates are available
 - A "mixed" review praises some things and criticizes others - score it based on the overall weight
-- Be precise: "excellent black daal" is a key phrase, not "food quality".""",
+- Be precise: quote the exact words from the review, e.g. "friendly pharmacist" or "best haircut ever", not generic labels like "good service".""",
     ),
     (
         "human",
@@ -263,21 +263,22 @@ Then: overall score, counts by category, trend direction, and a 2-sentence summa
 THEME_EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert hospitality analyst extracting SPECIFIC themes from restaurant reviews.
+        """You are an expert business review analyst extracting SPECIFIC themes from customer reviews. This could be any type of business — adapt to whatever the reviews describe.
 
 CRITICAL: Be specific, not generic.
-- BAD: "Food Quality" mentioned 5 times
-- GOOD: "Black Daal" mentioned in 12 of 30 reviews, "Lamb Biryani" in 7, "Bacon Naan Roll" in 6
+- BAD: "Product Quality" mentioned 5 times
+- GOOD: "Consultation process" mentioned in 12 of 30 reviews, "Friendly reception staff" in 7, "Parking availability" in 6
 
 Rules:
-1. Name themes by the SPECIFIC item, dish, or issue mentioned - not generic categories
+1. Name themes by the SPECIFIC product, service, staff member role, or issue mentioned - not generic categories
 2. Count EXACTLY how many reviews mention each theme out of the total
 3. For each theme, pull 2-3 DIRECT QUOTES from the actual reviews (copy the reviewer's words exactly)
-4. Calculate per-theme sentiment: a restaurant can have amazing food sentiment but terrible wait time sentiment
-5. Flag any EMERGING themes that appear only in the most recent reviews but not older ones
-6. Categories are for grouping only - the theme NAME must be specific (e.g., "Weekend brunch wait times" not "wait_time")
+4. Only quote reviews that are written in English. If a review is in another language, you may count it toward theme frequency but do not use it as a quote example.
+5. Calculate per-theme sentiment: a business can have great product sentiment but terrible wait time sentiment
+6. Flag any EMERGING themes that appear only in the most recent reviews but not older ones
+7. Categories are for grouping only - the theme NAME must be specific (e.g., "Weekend appointment availability" not "wait_time")
 
-Theme categories for grouping: food_quality, service, ambiance, value, cleanliness, location, menu, staff, wait_time, other.""",
+Theme categories for grouping: product_quality, service, environment, value, cleanliness, location, offerings, staff, wait_time, other.""",
     ),
     (
         "human",
@@ -286,12 +287,12 @@ Theme categories for grouping: food_quality, service, ambiance, value, cleanline
 {reviews_text}
 
 For each theme found:
-- Specific name (the actual dish, service aspect, or issue)
+- Specific name (the actual product, service aspect, or issue)
 - Category for grouping
 - Exact mention count out of {review_count} reviews
 - Per-theme sentiment score
 - Whether it's a strength or weakness
-- 2-3 direct quotes from reviewers (copy their exact words)
+- 2-3 direct quotes from reviewers (copy their exact words, English only)
 
 Then list top 3 specific strengths and top 3 specific areas needing improvement.
 Write a 2-sentence summary focused on what makes this business distinctive.""",
@@ -302,11 +303,17 @@ Write a 2-sentence summary focused on what makes this business distinctive.""",
 COMPETITOR_ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are an expert hospitality analyst producing NAMED competitive intelligence.
+        """You are an expert business analyst producing NAMED competitive intelligence. This could be any type of business — adapt to whatever industry the data describes.
 
 CRITICAL: Name every competitor explicitly and compare with specifics.
 - BAD: "Competitors tend to have better service"
-- GOOD: "Gunpowder (4.3 stars): customers praise their cocktail menu and small plates, but complain about portion sizes. Opportunity: you're not mentioned for drinks - consider promoting your cocktail offering."
+- GOOD: "Sunrise Pharmacy (4.3 stars): customers praise their quick prescription turnaround and knowledgeable staff, but complain about limited parking."
+
+ANTI-HALLUCINATION RULES:
+- NEVER invent or fabricate statistics, percentages, or specific numbers that are not directly stated in the reviews provided.
+- NEVER claim a competitor uses a specific tool, system, or technology unless it is explicitly mentioned in their reviews.
+- If you don't have data for a claim, don't make the claim. Base every comparison ONLY on evidence from the actual reviews.
+- Do NOT reference reviews you haven't seen — only reference the reviews provided to you.
 
 Rules:
 1. Name each competitor and their rating
@@ -338,11 +345,17 @@ Then: overall market position, top 3 competitive advantages, top 3 gaps to close
 INSIGHTS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are a senior hospitality consultant. Generate insights backed by SPECIFIC DATA from the analysis.
+        """You are a senior business consultant. Generate insights backed by SPECIFIC DATA from the analysis. This could be any type of business — adapt to whatever industry the data describes.
 
-CRITICAL: Every insight must cite specific numbers, quotes, or competitor names.
+CRITICAL: Every insight must cite specific numbers, quotes, or competitor names FROM THE DATA PROVIDED.
 - BAD: "Customer service could be improved"
-- GOOD: "3 of your 5 negative reviews specifically mention weekend brunch wait times exceeding 30 minutes. Your competitor Dishoom has a booking system that avoids this."
+- GOOD: "3 of your 5 negative reviews specifically mention long wait times at the reception desk."
+
+ANTI-HALLUCINATION RULES:
+- NEVER invent or fabricate statistics, percentages, or specific numbers that are not directly stated in the data provided.
+- NEVER claim a competitor uses a specific tool, system, or technology unless it is explicitly mentioned in their reviews.
+- If you don't have data for a claim, don't make the claim. Base every insight ONLY on evidence from the actual reviews and analysis above.
+- Do NOT reference reviews you haven't seen (e.g. "25% of 1-star reviews") — only reference the data provided to you.
 
 Categories: opportunity, risk, trend, competitive, operational.
 Each insight needs: a specific title, evidence-backed description, impact level, and the supporting data points.""",
@@ -357,7 +370,7 @@ Competitive Position: {competitor_summary}
 
 Generate 5-7 insights. Every insight MUST include:
 1. Specific title (not generic)
-2. Description citing exact data (review counts, specific dishes, named competitors)
+2. Description citing exact data (review counts, specific topics, named competitors)
 3. Impact level (high/medium/low)
 4. 2-3 supporting data points from the analysis above
 5. A 2-3 sentence executive summary of the most important finding""",
@@ -368,11 +381,17 @@ Generate 5-7 insights. Every insight MUST include:
 RECOMMENDATIONS_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are a hospitality consultant giving SPECIFIC, data-backed recommendations.
+        """You are a business consultant giving SPECIFIC, data-backed recommendations. This could be any type of business — adapt to whatever industry the data describes.
 
 CRITICAL: Recommendations must reference actual data from the analysis.
 - BAD: "Enhance customer service training"
-- GOOD: "Your 1-star reviews both mention weekend brunch wait times. Consider implementing a booking system for Saturday/Sunday before 2pm. Competitor Dishoom uses ResDiary and their wait time complaints dropped."
+- GOOD: "Your 2 lowest-rated reviews both mention long wait times on weekends. Consider implementing an appointment or queue management system for peak hours."
+
+ANTI-HALLUCINATION RULES:
+- NEVER invent or fabricate statistics, percentages, or specific numbers that are not directly stated in the reviews provided.
+- NEVER claim a competitor uses a specific tool or system unless it is explicitly mentioned in their reviews.
+- If you don't have data for a claim, don't make the claim. Base every recommendation ONLY on evidence from the actual reviews.
+- Do NOT reference reviews you haven't seen (e.g. "25% of 1-star reviews") — only reference the reviews provided to you.
 
 Rules:
 1. Each recommendation must cite the specific review data that motivates it
@@ -380,7 +399,7 @@ Rules:
 3. Expected outcomes should be measurable where possible
 4. Quick wins = things you can do THIS WEEK. Not "improve training over time."
 
-Categories: service, menu, marketing, operations, staff, ambiance, value.""",
+Categories: service, offerings, marketing, operations, staff, environment, value.""",
     ),
     (
         "human",
@@ -645,16 +664,16 @@ async def extract_themes(state: AnalysisState) -> dict:
             fallback_prompt = ChatPromptTemplate.from_messages([
                 (
                     "system",
-                    "You are a restaurant review analyst. Extract themes from reviews. "
-                    "A theme is any topic, dish, service aspect, or experience mentioned. "
+                    "You are a business review analyst. Extract themes from customer reviews. "
+                    "A theme is any topic, product, service aspect, or experience mentioned. "
                     "Even a single mention counts as a theme.",
                 ),
                 (
                     "human",
                     "Here are {review_count} reviews for {business_name}:\n\n{reviews_text}\n\n"
-                    "List every distinct topic, dish, or aspect mentioned. "
+                    "List every distinct topic, product, service, or aspect mentioned. "
                     "For each: name it specifically, count how many reviews mention it, "
-                    "note if sentiment is positive or negative, and quote one example.",
+                    "note if sentiment is positive or negative, and quote one example (English only).",
                 ),
             ]).format(
                 business_name=business_name,

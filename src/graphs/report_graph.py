@@ -72,14 +72,14 @@ class ChartData(BaseModel):
 EXECUTIVE_SUMMARY_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        """You are a senior hospitality consultant writing executive summaries for restaurant owners.
+        """You are a senior business consultant writing executive summaries for business owners. This could be any type of business — adapt your language to whatever industry the data describes.
 Your summaries should be:
 - Concise (2-3 sentences maximum)
 - Focused on actionable insights
 - Professional but accessible
 - Highlighting the most impactful finding
 
-Write as if speaking directly to a busy restaurant owner who needs the key takeaway immediately.""",
+Write as if speaking directly to a busy business owner who needs the key takeaway immediately.""",
     ),
     (
         "human",
