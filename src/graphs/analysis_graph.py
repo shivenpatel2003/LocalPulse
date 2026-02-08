@@ -588,7 +588,15 @@ async def analyze_sentiment(state: AnalysisState) -> dict:
             review.score = _normalize_score(review.score)
             review.confidence = max(0.0, min(review.confidence, 1.0))
 
-        result.overall_score = _normalize_score(result.overall_score)
+        # Calculate metrics from normalized individual scores (don't trust LLM aggregates)
+        scores = [r.score for r in result.reviews]
+        if scores:
+            result.overall_score = sum(scores) / len(scores)
+            result.positive_count = sum(1 for s in scores if s > 0.2)
+            result.negative_count = sum(1 for s in scores if s < -0.2)
+            result.neutral_count = len(scores) - result.positive_count - result.negative_count
+        else:
+            result.overall_score = 0.0
 
         logger.info(
             "analysis_sentiment_complete",
@@ -702,6 +710,20 @@ async def extract_themes(state: AnalysisState) -> dict:
                 theme.average_sentiment = (theme.average_sentiment / 5.0) * 2 - 1  # map 1-5 → -0.6 to 1.0
             elif theme.average_sentiment < -1.0:
                 theme.average_sentiment = max(theme.average_sentiment, -1.0)
+
+        # Filter non-English quotes from themes (LLM ignores prompt instructions)
+        _common_en = {"the", "and", "is", "was", "for", "with", "that", "this", "are", "but", "not", "have", "had", "were", "been", "from", "they", "very", "good", "great", "food", "place", "nice", "really", "will", "would", "just", "also", "been", "their", "service", "staff", "time"}
+        def _is_english(text: str) -> bool:
+            if not text or text == "No English quotes available":
+                return False
+            ascii_count = sum(1 for c in text if ord(c) < 128)
+            if ascii_count / max(len(text), 1) < 0.85:
+                return False
+            words = set(text.lower().split())
+            return len(words & _common_en) >= 2
+
+        for theme in result.themes:
+            theme.example_quotes = [q for q in theme.example_quotes if _is_english(q)]
 
         logger.info(
             "analysis_themes_complete",
