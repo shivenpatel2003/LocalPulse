@@ -93,29 +93,76 @@ class OutscraperService:
 
                 data = resp.json()
 
-                # Outscraper returns: {"id": "...", "status": "Success", "data": [[{...}]]}
-                if data.get("status") != "Success":
-                    logger.warning(
-                        "outscraper_not_success",
-                        status=data.get("status"),
+                # --- DEBUG: log raw response structure ---
+                logger.info(
+                    "outscraper_debug_response",
+                    response_type=type(data).__name__,
+                    top_level_keys=list(data.keys()) if isinstance(data, dict) else f"list[{len(data)}]",
+                )
+
+                # Outscraper returns different formats depending on async mode:
+                #   async mode:  {"id": "...", "status": "Success", "data": [[{...}]]}
+                #   sync mode:   [{name: "...", "reviews_data": [...]}]
+                place_data = None
+
+                if isinstance(data, list):
+                    # Sync mode: response is a direct list of place results
+                    logger.info(
+                        "outscraper_debug_sync_format",
+                        list_length=len(data),
+                        first_item_type=type(data[0]).__name__ if data else "empty",
+                        first_item_keys=list(data[0].keys())[:10] if data and isinstance(data[0], dict) else "N/A",
                     )
-                    return []
+                    if data and isinstance(data[0], dict):
+                        place_data = data[0]
+                    elif data and isinstance(data[0], list) and data[0]:
+                        # Nested: [[{...}]]
+                        place_data = data[0][0] if isinstance(data[0][0], dict) else None
 
-                results = data.get("data", [])
-                if not results or not results[0]:
-                    logger.info("outscraper_no_results", query=query)
-                    return []
-
-                place_data = results[0]
-                if isinstance(place_data, list):
-                    # data is [[{place_info}]] - take first place
-                    if not place_data:
+                elif isinstance(data, dict):
+                    # Async wrapper mode: {"status": "Success", "data": [[{...}]]}
+                    logger.info(
+                        "outscraper_debug_async_format",
+                        status=data.get("status"),
+                        data_type=type(data.get("data")).__name__ if "data" in data else "missing",
+                    )
+                    if data.get("status") != "Success":
+                        logger.warning(
+                            "outscraper_not_success",
+                            status=data.get("status"),
+                        )
                         return []
-                    place_data = place_data[0]
+
+                    results = data.get("data", [])
+                    if not results or not results[0]:
+                        logger.info("outscraper_no_results", query=query)
+                        return []
+
+                    inner = results[0]
+                    if isinstance(inner, list):
+                        place_data = inner[0] if inner else None
+                    elif isinstance(inner, dict):
+                        place_data = inner
+
+                if not place_data:
+                    logger.info("outscraper_no_place_data", query=query)
+                    return []
+
+                # --- DEBUG: log place_data structure ---
+                logger.info(
+                    "outscraper_debug_place_data",
+                    place_name=place_data.get("name", "N/A"),
+                    place_keys=list(place_data.keys())[:15],
+                    reviews_data_count=len(place_data.get("reviews_data", [])),
+                )
 
                 raw_reviews = place_data.get("reviews_data", [])
                 if not raw_reviews:
-                    logger.info("outscraper_no_reviews", query=query)
+                    logger.info(
+                        "outscraper_no_reviews",
+                        query=query,
+                        place_keys=list(place_data.keys())[:15],
+                    )
                     return []
 
                 # Normalize to pipeline format
