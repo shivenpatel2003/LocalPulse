@@ -448,6 +448,29 @@ def _strip_code_fences(text: str) -> str:
     return cleaned
 
 
+def _resolve_schema_refs(schema: dict) -> dict:
+    """Resolve $ref references in a JSON schema by inlining $defs.
+
+    Pydantic's model_json_schema() generates $defs and $ref which confuse
+    smaller LLMs like Haiku. This flattens them into a single schema.
+    """
+    defs = schema.pop("$defs", {})
+
+    def _resolve(obj):
+        if isinstance(obj, dict):
+            if "$ref" in obj:
+                ref_name = obj["$ref"].split("/")[-1]
+                if ref_name in defs:
+                    return _resolve(dict(defs[ref_name]))
+                return obj
+            return {k: _resolve(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_resolve(item) for item in obj]
+        return obj
+
+    return _resolve(schema)
+
+
 async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
     """Invoke LLM with JSON instructions and parse response into a Pydantic model.
 
@@ -462,12 +485,15 @@ async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
         An instance of model_class parsed from the LLM's JSON response.
 
     Raises:
-        ValueError: If JSON parsing or model validation fails.
+        Exception: If JSON parsing or model validation fails.
     """
     import json as _json
 
-    # Build JSON schema description from model
-    schema_json = _json.dumps(model_class.model_json_schema(), indent=2)
+    # Build a flattened JSON schema (resolve $ref/$defs for LLM readability)
+    raw_schema = model_class.model_json_schema()
+    flat_schema = _resolve_schema_refs(raw_schema)
+    schema_json = _json.dumps(flat_schema, indent=2)
+
     json_instruction = (
         "\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text). "
         f"Match this JSON schema:\n{schema_json}"
@@ -483,6 +509,13 @@ async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
     llm = _get_llm()
     raw_response = await llm.ainvoke(messages)
     raw_text = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
+
+    logger.debug(
+        "llm_json_raw_response",
+        model=model_class.__name__,
+        response_length=len(raw_text),
+        snippet=raw_text[:200],
+    )
 
     cleaned = _strip_code_fences(raw_text)
     parsed = _json.loads(cleaned)
