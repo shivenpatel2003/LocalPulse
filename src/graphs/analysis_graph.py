@@ -448,11 +448,55 @@ def _strip_code_fences(text: str) -> str:
     return cleaned
 
 
+def _resolve_schema_refs(schema: dict) -> dict:
+    """Resolve $ref references in a JSON schema by inlining $defs."""
+    from copy import deepcopy
+
+    schema = deepcopy(schema)
+    defs = schema.pop("$defs", {})
+
+    def _resolve(obj):
+        if isinstance(obj, dict):
+            if "$ref" in obj:
+                ref_name = obj["$ref"].split("/")[-1]
+                if ref_name in defs:
+                    return _resolve(deepcopy(defs[ref_name]))
+                return obj
+            return {k: _resolve(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_resolve(item) for item in obj]
+        return obj
+
+    return _resolve(schema)
+
+
+def _compact_schema(model_class: type[BaseModel]) -> str:
+    """Generate a compact, LLM-friendly JSON schema string from a Pydantic model."""
+    import json as _json
+
+    raw = model_class.model_json_schema()
+    flat = _resolve_schema_refs(raw)
+
+    # Strip verbose metadata to keep schema compact
+    def _strip(obj):
+        if isinstance(obj, dict):
+            return {
+                k: _strip(v)
+                for k, v in obj.items()
+                if k not in ("title", "description", "default")
+            }
+        if isinstance(obj, list):
+            return [_strip(i) for i in obj]
+        return obj
+
+    return _json.dumps(_strip(flat), indent=2)
+
+
 async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
     """Invoke LLM with structured output, falling back to manual JSON parsing.
 
     Primary: with_structured_output() (uses tool calling, works most of the time).
-    Fallback: raw LLM call asking for JSON, parsed manually.
+    Fallback: raw LLM call asking for JSON with compact schema, parsed manually.
 
     Args:
         prompt: A ChatPromptValue (from .format()) or list of messages.
@@ -462,6 +506,7 @@ async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
         An instance of model_class.
     """
     import json as _json
+    from copy import deepcopy
 
     llm = _get_llm()
 
@@ -485,14 +530,14 @@ async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
             error=str(e)[:300],
         )
 
-    # --- Fallback: raw LLM with JSON instruction ---
+    # --- Fallback: raw LLM with JSON schema instruction ---
     logger.info("llm_json_fallback", model=model_class.__name__)
 
+    schema_str = _compact_schema(model_class)
     json_instruction = (
-        "\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text)."
+        "\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text). "
+        f"Use this schema:\n{schema_str}"
     )
-    # Make a copy of messages so we don't mutate the originals
-    from copy import deepcopy
     fallback_messages = deepcopy(messages)
     fallback_messages[-1].content += json_instruction
 
