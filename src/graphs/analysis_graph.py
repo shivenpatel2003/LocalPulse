@@ -684,13 +684,16 @@ async def analyze_sentiment(state: AnalysisState) -> dict:
             )
         reviews_text = "\n\n".join(review_lines)
 
+        llm = _get_llm()
+        structured_llm = llm.with_structured_output(SentimentAnalysisResult)
+
         prompt = SENTIMENT_ANALYSIS_PROMPT.format(
             business_name=business_name,
             reviews_text=reviews_text,
             review_count=len(reviews),
         )
 
-        result: SentimentAnalysisResult = await _invoke_llm_json(prompt, SentimentAnalysisResult)
+        result: SentimentAnalysisResult = await structured_llm.ainvoke(prompt)
 
         # Normalize scores: LLM may return on 1-5 scale or outside -1 to 1
         def _normalize_score(val: float) -> float:
@@ -736,6 +739,26 @@ async def analyze_sentiment(state: AnalysisState) -> dict:
 
     except Exception as e:
         logger.error("analysis_sentiment_failed", error=str(e))
+        # Fallback: calculate rough sentiment from star ratings
+        ratings = [r.get("rating") for r in reviews if r.get("rating") is not None]
+        if ratings:
+            avg = sum(ratings) / len(ratings)
+            overall_score = (avg / 5.0) * 2 - 1  # map 1-5 → -0.6 to 1.0
+            pos = sum(1 for r in ratings if r >= 4)
+            neg = sum(1 for r in ratings if r <= 2)
+            neu = len(ratings) - pos - neg
+            logger.info("analysis_sentiment_rating_fallback", overall_score=overall_score)
+            return {
+                "sentiment_results": {
+                    **state.get("sentiment_results", {}),
+                    "overall_score": overall_score,
+                    "positive_count": pos,
+                    "negative_count": neg,
+                    "neutral_count": neu,
+                    "trend": "stable",
+                    "summary": f"Sentiment estimated from {len(ratings)} star ratings (avg {avg:.1f}/5).",
+                }
+            }
         return {
             "errors": [f"Sentiment analysis failed: {str(e)}"],
         }
@@ -777,20 +800,23 @@ async def extract_themes(state: AnalysisState) -> dict:
             )
         reviews_text = "\n\n".join(review_lines)
 
+        llm = _get_llm()
+        structured_llm = llm.with_structured_output(ThemeAnalysisResult)
+
         prompt = THEME_EXTRACTION_PROMPT.format(
             business_name=business_name,
             reviews_text=reviews_text,
             review_count=len(reviews),
         )
 
-        result: ThemeAnalysisResult = await _invoke_llm_json(prompt, ThemeAnalysisResult)
+        result: ThemeAnalysisResult = await structured_llm.ainvoke(prompt)
 
         # Fallback: if 0 themes returned but we have reviews, retry with simpler prompt
         if len(result.themes) == 0 and len(reviews) > 0:
             logger.warning(
                 "analysis_themes_empty_retry",
                 review_count=len(reviews),
-                msg="JSON parsing returned 0 themes, retrying with simpler prompt",
+                msg="Structured output returned 0 themes, retrying with simpler prompt",
             )
             fallback_prompt = ChatPromptTemplate.from_messages([
                 (
@@ -811,7 +837,7 @@ async def extract_themes(state: AnalysisState) -> dict:
                 reviews_text=reviews_text,
                 review_count=len(reviews),
             )
-            result = await _invoke_llm_json(fallback_prompt, ThemeAnalysisResult)
+            result = await structured_llm.ainvoke(fallback_prompt)
             logger.info(
                 "analysis_themes_fallback_complete",
                 theme_count=len(result.themes),
@@ -857,6 +883,12 @@ async def extract_themes(state: AnalysisState) -> dict:
     except Exception as e:
         logger.error("analysis_themes_failed", error=str(e))
         return {
+            "theme_results": [{
+                "summary": f"Theme extraction encountered an issue: {str(e)[:100]}",
+                "themes": [],
+                "top_strengths": [],
+                "top_weaknesses": [],
+            }],
             "errors": [f"Theme extraction failed: {str(e)}"],
         }
 
@@ -921,6 +953,9 @@ async def compare_competitors(state: AnalysisState) -> dict:
             comp_texts.append(comp_str)
         competitors_text = "\n\n".join(comp_texts)
 
+        llm = _get_llm()
+        structured_llm = llm.with_structured_output(CompetitorAnalysisResult)
+
         prompt = COMPETITOR_ANALYSIS_PROMPT.format(
             business_name=business_name,
             client_rating=client_rating,
@@ -929,7 +964,7 @@ async def compare_competitors(state: AnalysisState) -> dict:
             competitors_text=competitors_text,
         )
 
-        result: CompetitorAnalysisResult = await _invoke_llm_json(prompt, CompetitorAnalysisResult)
+        result: CompetitorAnalysisResult = await structured_llm.ainvoke(prompt)
 
         logger.info(
             "analysis_competitors_complete",
@@ -951,6 +986,14 @@ async def compare_competitors(state: AnalysisState) -> dict:
     except Exception as e:
         logger.error("analysis_competitors_failed", error=str(e))
         return {
+            "competitor_analysis": {
+                **competitor_data,
+                "market_position": "unknown",
+                "competitive_advantages": [],
+                "competitive_gaps": [],
+                "comparisons": [],
+                "summary": f"Competitor analysis encountered an issue: {str(e)[:100]}",
+            },
             "errors": [f"Competitor analysis failed: {str(e)}"],
         }
 
@@ -1036,6 +1079,9 @@ async def generate_recommendations(state: AnalysisState) -> dict:
         insights = state.get("insights", [])
         insights_text = "\n".join([f"- {insight}" for insight in insights])
 
+        llm = _get_llm()
+        structured_llm = llm.with_structured_output(RecommendationsResult)
+
         prompt = RECOMMENDATIONS_PROMPT.format(
             business_name=business_name,
             insights_text=insights_text or "No insights available",
@@ -1043,7 +1089,7 @@ async def generate_recommendations(state: AnalysisState) -> dict:
             weaknesses=", ".join(weaknesses) if weaknesses else "Not identified",
         )
 
-        result: RecommendationsResult = await _invoke_llm_json(prompt, RecommendationsResult)
+        result: RecommendationsResult = await structured_llm.ainvoke(prompt)
 
         logger.info(
             "analysis_recommendations_complete",
