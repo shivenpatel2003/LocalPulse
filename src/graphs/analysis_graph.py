@@ -44,13 +44,10 @@ class ReviewSentiment(BaseModel):
     )
     score: float = Field(
         description="Sentiment score from -1.0 (very negative) to 1.0 (very positive)",
-        ge=-1.0,
-        le=1.0,
+        default=0.0,
     )
     confidence: float = Field(
         description="Confidence in the sentiment classification (0-1)",
-        ge=0.0,
-        le=1.0,
         default=0.8,
     )
     key_phrases: list[str] = Field(
@@ -66,9 +63,8 @@ class SentimentAnalysisResult(BaseModel):
         description="Sentiment analysis for each review"
     )
     overall_score: float = Field(
-        description="Average sentiment score across all reviews",
-        ge=-1.0,
-        le=1.0,
+        description="Average sentiment score across all reviews (-1.0 to 1.0 scale)",
+        default=0.0,
     )
     positive_count: int = Field(description="Number of positive reviews")
     negative_count: int = Field(description="Number of negative reviews")
@@ -273,7 +269,7 @@ Rules:
 1. Name themes by the SPECIFIC product, service, staff member role, or issue mentioned - not generic categories
 2. Count EXACTLY how many reviews mention each theme out of the total
 3. For each theme, pull 2-3 DIRECT QUOTES from the actual reviews (copy the reviewer's words exactly)
-4. Only quote reviews that are written in English. If a review is in another language, you may count it toward theme frequency but do not use it as a quote example.
+4. IMPORTANT: You MUST only use English-language quotes in example_quotes. If the only reviews mentioning a theme are in a non-English language, write "No English quotes available" instead of quoting the non-English text. NEVER include non-English text in quotes.
 5. Calculate per-theme sentiment: a business can have great product sentiment but terrible wait time sentiment
 6. Flag any EMERGING themes that appear only in the most recent reviews but not older ones
 7. Categories are for grouping only - the theme NAME must be specific (e.g., "Weekend appointment availability" not "wait_time")
@@ -579,6 +575,20 @@ async def analyze_sentiment(state: AnalysisState) -> dict:
         )
 
         result: SentimentAnalysisResult = await structured_llm.ainvoke(prompt)
+
+        # Normalize scores: LLM may return on 1-5 scale or outside -1 to 1
+        def _normalize_score(val: float) -> float:
+            if val > 1.0:
+                return min((val / 5.0) * 2 - 1, 1.0)
+            if val < -1.0:
+                return max(val, -1.0)
+            return val
+
+        for review in result.reviews:
+            review.score = _normalize_score(review.score)
+            review.confidence = max(0.0, min(review.confidence, 1.0))
+
+        result.overall_score = _normalize_score(result.overall_score)
 
         logger.info(
             "analysis_sentiment_complete",
