@@ -131,9 +131,9 @@ class CompetitorComparison(BaseModel):
     """Comparison with a single competitor."""
 
     competitor_name: str = Field(description="Name of the competitor")
-    competitor_rating: float = Field(
+    competitor_rating: Optional[float] = Field(
         description="The competitor's star rating",
-        default=0.0,
+        default=None,
     )
     rating_difference: float = Field(
         description="Rating difference (positive means client is higher)",
@@ -637,6 +637,38 @@ async def extract_themes(state: AnalysisState) -> dict:
 
         result: ThemeAnalysisResult = await structured_llm.ainvoke(prompt)
 
+        # Fallback: if 0 themes returned but we have reviews, retry with simpler prompt
+        if len(result.themes) == 0 and len(reviews) > 0:
+            logger.warning(
+                "analysis_themes_empty_retry",
+                review_count=len(reviews),
+                msg="Structured output returned 0 themes, retrying with simpler prompt",
+            )
+            fallback_prompt = ChatPromptTemplate.from_messages([
+                (
+                    "system",
+                    "You are a restaurant review analyst. Extract themes from reviews. "
+                    "A theme is any topic, dish, service aspect, or experience mentioned. "
+                    "Even a single mention counts as a theme.",
+                ),
+                (
+                    "human",
+                    "Here are {review_count} reviews for {business_name}:\n\n{reviews_text}\n\n"
+                    "List every distinct topic, dish, or aspect mentioned. "
+                    "For each: name it specifically, count how many reviews mention it, "
+                    "note if sentiment is positive or negative, and quote one example.",
+                ),
+            ]).format(
+                business_name=business_name,
+                reviews_text=reviews_text,
+                review_count=len(reviews),
+            )
+            result = await structured_llm.ainvoke(fallback_prompt)
+            logger.info(
+                "analysis_themes_fallback_complete",
+                theme_count=len(result.themes),
+            )
+
         logger.info(
             "analysis_themes_complete",
             theme_count=len(result.themes),
@@ -790,7 +822,39 @@ async def generate_insights(state: AnalysisState) -> dict:
             competitor_summary=competitor_summary,
         )
 
-        result: InsightsResult = await structured_llm.ainvoke(prompt)
+        try:
+            result: InsightsResult = await structured_llm.ainvoke(prompt)
+        except Exception as structured_err:
+            # Fallback: LLM may return JSON string instead of parsed object
+            logger.warning(
+                "analysis_insights_structured_failed",
+                error=str(structured_err),
+                msg="Falling back to raw LLM + JSON parsing",
+            )
+            import json as _json
+
+            raw_llm = _get_llm()
+            raw_response = await raw_llm.ainvoke(prompt)
+            raw_text = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
+
+            # Try to extract JSON from the response
+            try:
+                # Strip markdown code fences if present
+                cleaned = raw_text.strip()
+                if cleaned.startswith("```"):
+                    cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+                    if cleaned.endswith("```"):
+                        cleaned = cleaned[:-3]
+                    cleaned = cleaned.strip()
+                parsed = _json.loads(cleaned)
+                result = InsightsResult(**parsed)
+            except Exception as json_err:
+                logger.error("analysis_insights_json_fallback_failed", error=str(json_err))
+                # Return a minimal valid result instead of failing entirely
+                result = InsightsResult(
+                    insights=[],
+                    executive_summary=f"Insight generation encountered a parsing issue. Raw summary: {raw_text[:300]}",
+                )
 
         logger.info(
             "analysis_insights_complete",
