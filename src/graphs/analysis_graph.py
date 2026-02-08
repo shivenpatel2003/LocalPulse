@@ -437,6 +437,58 @@ def _get_llm() -> ChatAnthropic:
     )
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip markdown code fences from LLM response text."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+    return cleaned
+
+
+async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
+    """Invoke LLM with JSON instructions and parse response into a Pydantic model.
+
+    This avoids with_structured_output() which intermittently returns JSON strings
+    that fail Pydantic validation instead of parsed objects.
+
+    Args:
+        prompt: A ChatPromptValue (from .format()) or list of messages.
+        model_class: The Pydantic model class to parse the response into.
+
+    Returns:
+        An instance of model_class parsed from the LLM's JSON response.
+
+    Raises:
+        ValueError: If JSON parsing or model validation fails.
+    """
+    import json as _json
+
+    # Build JSON schema description from model
+    schema_json = _json.dumps(model_class.model_json_schema(), indent=2)
+    json_instruction = (
+        "\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text). "
+        f"Match this JSON schema:\n{schema_json}"
+    )
+
+    # Convert prompt to messages and append JSON instruction
+    if hasattr(prompt, "to_messages"):
+        messages = prompt.to_messages()
+    else:
+        messages = list(prompt)
+    messages[-1].content += json_instruction
+
+    llm = _get_llm()
+    raw_response = await llm.ainvoke(messages)
+    raw_text = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
+
+    cleaned = _strip_code_fences(raw_text)
+    parsed = _json.loads(cleaned)
+    return model_class(**parsed)
+
+
 async def fetch_data(state: AnalysisState) -> dict:
     """Fetch business and review data from Neo4j.
 
@@ -565,16 +617,13 @@ async def analyze_sentiment(state: AnalysisState) -> dict:
             )
         reviews_text = "\n\n".join(review_lines)
 
-        llm = _get_llm()
-        structured_llm = llm.with_structured_output(SentimentAnalysisResult)
-
         prompt = SENTIMENT_ANALYSIS_PROMPT.format(
             business_name=business_name,
             reviews_text=reviews_text,
             review_count=len(reviews),
         )
 
-        result: SentimentAnalysisResult = await structured_llm.ainvoke(prompt)
+        result: SentimentAnalysisResult = await _invoke_llm_json(prompt, SentimentAnalysisResult)
 
         # Normalize scores: LLM may return on 1-5 scale or outside -1 to 1
         def _normalize_score(val: float) -> float:
@@ -661,23 +710,20 @@ async def extract_themes(state: AnalysisState) -> dict:
             )
         reviews_text = "\n\n".join(review_lines)
 
-        llm = _get_llm()
-        structured_llm = llm.with_structured_output(ThemeAnalysisResult)
-
         prompt = THEME_EXTRACTION_PROMPT.format(
             business_name=business_name,
             reviews_text=reviews_text,
             review_count=len(reviews),
         )
 
-        result: ThemeAnalysisResult = await structured_llm.ainvoke(prompt)
+        result: ThemeAnalysisResult = await _invoke_llm_json(prompt, ThemeAnalysisResult)
 
         # Fallback: if 0 themes returned but we have reviews, retry with simpler prompt
         if len(result.themes) == 0 and len(reviews) > 0:
             logger.warning(
                 "analysis_themes_empty_retry",
                 review_count=len(reviews),
-                msg="Structured output returned 0 themes, retrying with simpler prompt",
+                msg="JSON parsing returned 0 themes, retrying with simpler prompt",
             )
             fallback_prompt = ChatPromptTemplate.from_messages([
                 (
@@ -698,7 +744,7 @@ async def extract_themes(state: AnalysisState) -> dict:
                 reviews_text=reviews_text,
                 review_count=len(reviews),
             )
-            result = await structured_llm.ainvoke(fallback_prompt)
+            result = await _invoke_llm_json(fallback_prompt, ThemeAnalysisResult)
             logger.info(
                 "analysis_themes_fallback_complete",
                 theme_count=len(result.themes),
@@ -808,9 +854,6 @@ async def compare_competitors(state: AnalysisState) -> dict:
             comp_texts.append(comp_str)
         competitors_text = "\n\n".join(comp_texts)
 
-        llm = _get_llm()
-        structured_llm = llm.with_structured_output(CompetitorAnalysisResult)
-
         prompt = COMPETITOR_ANALYSIS_PROMPT.format(
             business_name=business_name,
             client_rating=client_rating,
@@ -819,7 +862,7 @@ async def compare_competitors(state: AnalysisState) -> dict:
             competitors_text=competitors_text,
         )
 
-        result: CompetitorAnalysisResult = await structured_llm.ainvoke(prompt)
+        result: CompetitorAnalysisResult = await _invoke_llm_json(prompt, CompetitorAnalysisResult)
 
         logger.info(
             "analysis_competitors_complete",
@@ -868,63 +911,14 @@ async def generate_insights(state: AnalysisState) -> dict:
         theme_summary = theme_data.get("summary", "No theme analysis available")
         competitor_summary = competitor_analysis.get("summary", "No competitor analysis available")
 
-        import json as _json
-
-        llm = _get_llm()
-
-        # Build prompt with explicit JSON schema request (avoids with_structured_output issues)
-        json_schema = _json.dumps({
-            "insights": [
-                {
-                    "title": "string",
-                    "description": "string",
-                    "impact": "high | medium | low",
-                    "category": "opportunity | risk | trend | competitive | operational",
-                    "supporting_data": ["string"],
-                }
-            ],
-            "executive_summary": "string (2-3 sentences)",
-        }, indent=2)
-
-        base_prompt = INSIGHTS_PROMPT.format(
+        prompt = INSIGHTS_PROMPT.format(
             business_name=business_name,
             sentiment_summary=sentiment_summary,
             theme_summary=theme_summary,
             competitor_summary=competitor_summary,
         )
 
-        # Append JSON format instruction to the last message
-        json_instruction = (
-            f"\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text). "
-            f"Use exactly this schema:\n{json_schema}"
-        )
-        # base_prompt is a ChatPromptValue; convert to messages and append instruction
-        messages = base_prompt.to_messages()
-        messages[-1].content += json_instruction
-
-        raw_response = await llm.ainvoke(messages)
-        raw_text = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
-
-        try:
-            # Strip markdown code fences if present
-            cleaned = raw_text.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                cleaned = cleaned.strip()
-            parsed = _json.loads(cleaned)
-            result = InsightsResult(**parsed)
-        except Exception as parse_err:
-            logger.warning(
-                "analysis_insights_json_parse_failed",
-                error=str(parse_err),
-                raw_text_snippet=raw_text[:200],
-            )
-            result = InsightsResult(
-                insights=[],
-                executive_summary=f"Insight generation encountered a parsing issue. Raw summary: {raw_text[:300]}",
-            )
+        result: InsightsResult = await _invoke_llm_json(prompt, InsightsResult)
 
         logger.info(
             "analysis_insights_complete",
@@ -975,9 +969,6 @@ async def generate_recommendations(state: AnalysisState) -> dict:
         insights = state.get("insights", [])
         insights_text = "\n".join([f"- {insight}" for insight in insights])
 
-        llm = _get_llm()
-        structured_llm = llm.with_structured_output(RecommendationsResult)
-
         prompt = RECOMMENDATIONS_PROMPT.format(
             business_name=business_name,
             insights_text=insights_text or "No insights available",
@@ -985,7 +976,7 @@ async def generate_recommendations(state: AnalysisState) -> dict:
             weaknesses=", ".join(weaknesses) if weaknesses else "Not identified",
         )
 
-        result: RecommendationsResult = await structured_llm.ainvoke(prompt)
+        result: RecommendationsResult = await _invoke_llm_json(prompt, RecommendationsResult)
 
         logger.info(
             "analysis_recommendations_complete",
