@@ -448,73 +448,62 @@ def _strip_code_fences(text: str) -> str:
     return cleaned
 
 
-def _resolve_schema_refs(schema: dict) -> dict:
-    """Resolve $ref references in a JSON schema by inlining $defs.
-
-    Pydantic's model_json_schema() generates $defs and $ref which confuse
-    smaller LLMs like Haiku. This flattens them into a single schema.
-    """
-    defs = schema.pop("$defs", {})
-
-    def _resolve(obj):
-        if isinstance(obj, dict):
-            if "$ref" in obj:
-                ref_name = obj["$ref"].split("/")[-1]
-                if ref_name in defs:
-                    return _resolve(dict(defs[ref_name]))
-                return obj
-            return {k: _resolve(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [_resolve(item) for item in obj]
-        return obj
-
-    return _resolve(schema)
-
-
 async def _invoke_llm_json(prompt, model_class: type[BaseModel]):
-    """Invoke LLM with JSON instructions and parse response into a Pydantic model.
+    """Invoke LLM with structured output, falling back to manual JSON parsing.
 
-    This avoids with_structured_output() which intermittently returns JSON strings
-    that fail Pydantic validation instead of parsed objects.
+    Primary: with_structured_output() (uses tool calling, works most of the time).
+    Fallback: raw LLM call asking for JSON, parsed manually.
 
     Args:
         prompt: A ChatPromptValue (from .format()) or list of messages.
         model_class: The Pydantic model class to parse the response into.
 
     Returns:
-        An instance of model_class parsed from the LLM's JSON response.
-
-    Raises:
-        Exception: If JSON parsing or model validation fails.
+        An instance of model_class.
     """
     import json as _json
 
-    # Build a flattened JSON schema (resolve $ref/$defs for LLM readability)
-    raw_schema = model_class.model_json_schema()
-    flat_schema = _resolve_schema_refs(raw_schema)
-    schema_json = _json.dumps(flat_schema, indent=2)
+    llm = _get_llm()
 
-    json_instruction = (
-        "\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text). "
-        f"Match this JSON schema:\n{schema_json}"
-    )
-
-    # Convert prompt to messages and append JSON instruction
+    # Convert prompt to messages
     if hasattr(prompt, "to_messages"):
         messages = prompt.to_messages()
     else:
         messages = list(prompt)
-    messages[-1].content += json_instruction
 
-    llm = _get_llm()
-    raw_response = await llm.ainvoke(messages)
+    # --- Primary: try with_structured_output (tool calling) ---
+    try:
+        structured_llm = llm.with_structured_output(model_class)
+        result = await structured_llm.ainvoke(messages)
+        if isinstance(result, model_class):
+            logger.info("llm_structured_ok", model=model_class.__name__)
+            return result
+    except Exception as e:
+        logger.warning(
+            "llm_structured_failed",
+            model=model_class.__name__,
+            error=str(e)[:300],
+        )
+
+    # --- Fallback: raw LLM with JSON instruction ---
+    logger.info("llm_json_fallback", model=model_class.__name__)
+
+    json_instruction = (
+        "\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text)."
+    )
+    # Make a copy of messages so we don't mutate the originals
+    from copy import deepcopy
+    fallback_messages = deepcopy(messages)
+    fallback_messages[-1].content += json_instruction
+
+    raw_response = await llm.ainvoke(fallback_messages)
     raw_text = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
 
-    logger.debug(
+    logger.info(
         "llm_json_raw_response",
         model=model_class.__name__,
         response_length=len(raw_text),
-        snippet=raw_text[:200],
+        snippet=raw_text[:300],
     )
 
     cleaned = _strip_code_fences(raw_text)
