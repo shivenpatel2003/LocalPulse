@@ -97,9 +97,7 @@ class Theme(BaseModel):
     ] = Field(description="Theme category", default="other")
     mention_count: int = Field(description="Number of reviews mentioning this theme", default=1)
     average_sentiment: float = Field(
-        description="Average sentiment when this theme is mentioned",
-        ge=-1.0,
-        le=1.0,
+        description="Average sentiment when this theme is mentioned (-1.0 to 1.0 scale)",
         default=0.0,
     )
     is_strength: bool = Field(
@@ -135,7 +133,7 @@ class CompetitorComparison(BaseModel):
         description="The competitor's star rating",
         default=None,
     )
-    rating_difference: float = Field(
+    rating_difference: Optional[float] = Field(
         description="Rating difference (positive means client is higher)",
         default=0.0,
     )
@@ -668,6 +666,13 @@ async def extract_themes(state: AnalysisState) -> dict:
                 "analysis_themes_fallback_complete",
                 theme_count=len(result.themes),
             )
+
+        # Normalize average_sentiment: LLM may return on 1-5 scale instead of -1 to 1
+        for theme in result.themes:
+            if theme.average_sentiment > 1.0:
+                theme.average_sentiment = (theme.average_sentiment / 5.0) * 2 - 1  # map 1-5 → -0.6 to 1.0
+            elif theme.average_sentiment < -1.0:
+                theme.average_sentiment = max(theme.average_sentiment, -1.0)
 
         logger.info(
             "analysis_themes_complete",

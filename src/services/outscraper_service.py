@@ -79,6 +79,7 @@ class OutscraperService:
                         "reviewsLimit": limit,
                         "sort": sort,
                         "language": "en",
+                        "async": "false",
                     },
                 )
 
