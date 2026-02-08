@@ -868,49 +868,63 @@ async def generate_insights(state: AnalysisState) -> dict:
         theme_summary = theme_data.get("summary", "No theme analysis available")
         competitor_summary = competitor_analysis.get("summary", "No competitor analysis available")
 
-        llm = _get_llm()
-        structured_llm = llm.with_structured_output(InsightsResult)
+        import json as _json
 
-        prompt = INSIGHTS_PROMPT.format(
+        llm = _get_llm()
+
+        # Build prompt with explicit JSON schema request (avoids with_structured_output issues)
+        json_schema = _json.dumps({
+            "insights": [
+                {
+                    "title": "string",
+                    "description": "string",
+                    "impact": "high | medium | low",
+                    "category": "opportunity | risk | trend | competitive | operational",
+                    "supporting_data": ["string"],
+                }
+            ],
+            "executive_summary": "string (2-3 sentences)",
+        }, indent=2)
+
+        base_prompt = INSIGHTS_PROMPT.format(
             business_name=business_name,
             sentiment_summary=sentiment_summary,
             theme_summary=theme_summary,
             competitor_summary=competitor_summary,
         )
 
+        # Append JSON format instruction to the last message
+        json_instruction = (
+            f"\n\nRespond with ONLY valid JSON (no markdown, no code fences, no extra text). "
+            f"Use exactly this schema:\n{json_schema}"
+        )
+        # base_prompt is a ChatPromptValue; convert to messages and append instruction
+        messages = base_prompt.to_messages()
+        messages[-1].content += json_instruction
+
+        raw_response = await llm.ainvoke(messages)
+        raw_text = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
+
         try:
-            result: InsightsResult = await structured_llm.ainvoke(prompt)
-        except Exception as structured_err:
-            # Fallback: LLM may return JSON string instead of parsed object
+            # Strip markdown code fences if present
+            cleaned = raw_text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+            parsed = _json.loads(cleaned)
+            result = InsightsResult(**parsed)
+        except Exception as parse_err:
             logger.warning(
-                "analysis_insights_structured_failed",
-                error=str(structured_err),
-                msg="Falling back to raw LLM + JSON parsing",
+                "analysis_insights_json_parse_failed",
+                error=str(parse_err),
+                raw_text_snippet=raw_text[:200],
             )
-            import json as _json
-
-            raw_llm = _get_llm()
-            raw_response = await raw_llm.ainvoke(prompt)
-            raw_text = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
-
-            # Try to extract JSON from the response
-            try:
-                # Strip markdown code fences if present
-                cleaned = raw_text.strip()
-                if cleaned.startswith("```"):
-                    cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-                    if cleaned.endswith("```"):
-                        cleaned = cleaned[:-3]
-                    cleaned = cleaned.strip()
-                parsed = _json.loads(cleaned)
-                result = InsightsResult(**parsed)
-            except Exception as json_err:
-                logger.error("analysis_insights_json_fallback_failed", error=str(json_err))
-                # Return a minimal valid result instead of failing entirely
-                result = InsightsResult(
-                    insights=[],
-                    executive_summary=f"Insight generation encountered a parsing issue. Raw summary: {raw_text[:300]}",
-                )
+            result = InsightsResult(
+                insights=[],
+                executive_summary=f"Insight generation encountered a parsing issue. Raw summary: {raw_text[:300]}",
+            )
 
         logger.info(
             "analysis_insights_complete",
