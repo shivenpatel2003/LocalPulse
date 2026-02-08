@@ -43,7 +43,7 @@ class OutscraperService:
         self,
         query: str,
         limit: int = 30,
-        sort: str = "newest_first",
+        sort: str = "newest",
     ) -> list[dict[str, Any]]:
         """Fetch Google Reviews for a business via Outscraper.
 
@@ -51,7 +51,7 @@ class OutscraperService:
             query: Business name + location (e.g. "Dishoom King's Cross, London")
                    OR a Google place_id.
             limit: Maximum number of reviews to fetch.
-            sort: Sort order - "newest_first" or "most_relevant".
+            sort: Sort order - "newest", "most_relevant", "highest_rating", "lowest_rating".
 
         Returns:
             List of normalized review dicts matching the pipeline format:
@@ -111,7 +111,7 @@ class OutscraperService:
                         "outscraper_debug_sync_format",
                         list_length=len(data),
                         first_item_type=type(data[0]).__name__ if data else "empty",
-                        first_item_keys=list(data[0].keys())[:10] if data and isinstance(data[0], dict) else "N/A",
+                        first_item_keys=list(data[0].keys()) if data and isinstance(data[0], dict) else "N/A",
                     )
                     if data and isinstance(data[0], dict):
                         place_data = data[0]
@@ -149,10 +149,14 @@ class OutscraperService:
                     return []
 
                 # --- DEBUG: log place_data structure ---
+                all_keys = list(place_data.keys())
+                # Check for any key containing "review" to find where reviews live
+                review_keys = [k for k in all_keys if "review" in k.lower()]
                 logger.info(
                     "outscraper_debug_place_data",
                     place_name=place_data.get("name", "N/A"),
-                    place_keys=list(place_data.keys())[:15],
+                    place_keys_all=all_keys,
+                    review_related_keys=review_keys,
                     reviews_data_count=len(place_data.get("reviews_data", [])),
                 )
 
@@ -161,7 +165,8 @@ class OutscraperService:
                     logger.info(
                         "outscraper_no_reviews",
                         query=query,
-                        place_keys=list(place_data.keys())[:15],
+                        place_keys_all=all_keys,
+                        review_related_keys=review_keys,
                     )
                     return []
 
@@ -279,7 +284,7 @@ class OutscraperService:
             reviews = await self.fetch_reviews(
                 query=query,
                 limit=reviews_per_competitor,
-                sort="newest_first",
+                sort="newest",
             )
 
             comp_with_reviews = dict(comp)

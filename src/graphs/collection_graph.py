@@ -185,7 +185,7 @@ async def collect_reviews(state: CollectionState) -> dict:
             reviews = await outscraper.fetch_reviews(
                 query=query,
                 limit=30,
-                sort="newest_first",
+                sort="newest",
             )
 
             if reviews:
