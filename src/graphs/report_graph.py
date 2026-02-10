@@ -334,6 +334,28 @@ HTML_REPORT_TEMPLATE = """
         </div>
         {% endif %}
 
+        <!-- Suggested Responses -->
+        {% if review_responses %}
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 6px 0;padding-bottom:10px;border-bottom:3px solid #667eea;display:inline-block;">Suggested Responses</h2>
+            <p style="font-size:13px;color:#888;margin:0 0 20px 0;">AI-drafted replies for your most important reviews — copy, tweak &amp; post.</p>
+
+            {% for resp in review_responses %}
+            <div style="background:#f8f9fa;border-radius:10px;padding:20px;margin-bottom:14px;">
+                <div style="margin-bottom:10px;">
+                    <span style="font-weight:600;color:#1a1a2e;">{{ resp.reviewer_name }}</span>
+                    <span style="margin-left:8px;font-size:13px;color:#f59e0b;">{% for i in range(resp.rating|int) %}&#9733;{% endfor %}{% for i in range(5 - resp.rating|int) %}&#9734;{% endfor %}</span>
+                    <span style="float:right;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#888;background:#eee;padding:3px 8px;border-radius:4px;">{{ resp.strategy | replace('_', ' ') | title }}</span>
+                </div>
+                <div style="font-size:13px;color:#666;font-style:italic;margin-bottom:12px;">&#8220;{{ resp.review_text[:100] }}{% if resp.review_text|length > 100 %}&hellip;{% endif %}&#8221;</div>
+                <div style="background:#eef2ff;border-left:4px solid #667eea;border-radius:0 8px 8px 0;padding:14px;">
+                    <p style="margin:0;color:#333;font-size:14px;line-height:1.6;">{{ resp.response_text }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <!-- Footer -->
         <div style="background:#1a1a2e;color:white;padding:30px;text-align:center;">
             <div style="font-size:20px;font-weight:700;margin-bottom:10px;">LocalPulse</div>
@@ -385,6 +407,7 @@ async def prepare_report_data(state: ReportState) -> dict:
     competitor_analysis = analysis.get("competitor_analysis", {})
     insights = analysis.get("insights", [])
     recommendations = analysis.get("recommendations", [])
+    review_responses = analysis.get("review_responses", [])
 
     # Get theme data
     theme_data = theme_results[0] if theme_results else {}
@@ -423,6 +446,7 @@ async def prepare_report_data(state: ReportState) -> dict:
         "quick_wins": sentiment_results.get("quick_wins", []),
         "detailed_insights": sentiment_results.get("detailed_insights", []),
         "detailed_recommendations": sentiment_results.get("detailed_recommendations", []),
+        "review_responses": review_responses,
     }
 
     # Preserve owner_email: check state channel first, then analysis dict as fallback
@@ -666,6 +690,7 @@ async def render_html_report(state: ReportState) -> dict:
             "insights": insights_for_template,
             "recommendations": recommendations_for_template,
             "quick_wins": report_data.get("quick_wins", [])[:3],
+            "review_responses": report_data.get("review_responses", []),
         }
 
         # Render template

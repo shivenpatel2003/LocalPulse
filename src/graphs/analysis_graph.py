@@ -1123,6 +1123,97 @@ async def generate_recommendations(state: AnalysisState) -> dict:
 
 
 # =============================================================================
+# Review Response Generation
+# =============================================================================
+
+
+async def generate_review_responses(state: AnalysisState) -> dict:
+    """Generate AI-suggested responses for the most important reviews.
+
+    Prioritises negative reviews (1-2 stars), then mixed (3 stars),
+    then a couple of positive ones. Up to 5 total.
+
+    Args:
+        state: Current state with reviews and business context.
+
+    Returns:
+        Partial state update with review_responses list.
+    """
+    from src.services.response_generator import ReviewInput, ReviewResponseGenerator
+
+    business_name = state.get("sentiment_results", {}).get("business_name", "Unknown")
+    reviews = state.get("reviews", [])
+
+    logger.info(
+        "analysis_review_responses_start",
+        business_name=business_name,
+        total_reviews=len(reviews),
+    )
+
+    if not reviews:
+        return {"review_responses": []}
+
+    try:
+        # Sort reviews: 1-2 stars first, then 3, then 4-5
+        def priority_key(r: dict) -> tuple:
+            rating = r.get("rating", 5)
+            if rating <= 2:
+                return (0, rating)
+            elif rating <= 3:
+                return (1, rating)
+            else:
+                return (2, -rating)  # Among positive, prefer higher rated
+
+        # Only consider reviews that have text
+        reviews_with_text = [r for r in reviews if r.get("text")]
+        reviews_with_text.sort(key=priority_key)
+        selected = reviews_with_text[:5]
+
+        if not selected:
+            return {"review_responses": []}
+
+        generator = ReviewResponseGenerator()
+        results = []
+
+        for review in selected:
+            try:
+                review_input = ReviewInput(
+                    reviewer_name=review.get("author_name", "A customer"),
+                    rating=float(review.get("rating", 3)),
+                    review_text=review.get("text", ""),
+                    business_name=business_name,
+                    business_type="local business",
+                )
+                response = await generator.generate_response(review_input)
+                results.append({
+                    "reviewer_name": review_input.reviewer_name,
+                    "rating": review_input.rating,
+                    "review_text": review.get("text", ""),
+                    "response_text": response.response_text,
+                    "strategy": response.strategy.value,
+                    "tone": response.tone_used.value,
+                })
+            except Exception as e:
+                logger.warning(
+                    "review_response_single_failed",
+                    reviewer=review.get("author_name"),
+                    error=str(e),
+                )
+                continue
+
+        logger.info(
+            "analysis_review_responses_complete",
+            responses_generated=len(results),
+        )
+
+        return {"review_responses": results}
+
+    except Exception as e:
+        logger.error("analysis_review_responses_failed", error=str(e))
+        return {"review_responses": []}
+
+
+# =============================================================================
 # Graph Builder
 # =============================================================================
 
@@ -1150,6 +1241,7 @@ def create_analysis_graph() -> StateGraph:
     workflow.add_node("compare_competitors", compare_competitors)
     workflow.add_node("generate_insights", generate_insights)
     workflow.add_node("generate_recommendations", generate_recommendations)
+    workflow.add_node("generate_review_responses", generate_review_responses)
 
     # Set entry point
     workflow.set_entry_point("fetch_data")
@@ -1160,7 +1252,8 @@ def create_analysis_graph() -> StateGraph:
     workflow.add_edge("extract_themes", "compare_competitors")
     workflow.add_edge("compare_competitors", "generate_insights")
     workflow.add_edge("generate_insights", "generate_recommendations")
-    workflow.add_edge("generate_recommendations", END)
+    workflow.add_edge("generate_recommendations", "generate_review_responses")
+    workflow.add_edge("generate_review_responses", END)
 
     return workflow
 

@@ -151,6 +151,7 @@ class AnalysisState(TypedDict, total=False):
     competitor_analysis: dict[str, Any]
     insights: Annotated[list[str], merge_lists]
     recommendations: Annotated[list[str], merge_lists]
+    review_responses: Annotated[list[dict[str, Any]], merge_lists]
     errors: Annotated[list[str], merge_lists]
     status: str
     owner_email: str
@@ -269,6 +270,7 @@ def create_analysis_state(
         competitor_analysis={},
         insights=[],
         recommendations=[],
+        review_responses=[],
         errors=[],
         status=AnalysisStatus.PENDING.value,
     )

@@ -312,6 +312,7 @@ async def run_report_phase(state: MasterState) -> dict:
             "competitor_analysis": analysis_state.get("competitor_analysis", {}),
             "insights": analysis_state.get("insights", []),
             "recommendations": analysis_state.get("recommendations", []),
+            "review_responses": analysis_state.get("review_responses", []),
         }
         # Include owner_email in analysis_data as fallback delivery path
         if owner_email:
