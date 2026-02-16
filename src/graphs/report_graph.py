@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -672,6 +673,15 @@ async def render_html_report(state: ReportState) -> dict:
                     "priority": priority,
                 })
 
+        # Strip [RX] review citation tags from recommendation text fields
+        _rx_pattern = re.compile(r'\[R\d+(?:,\s*R\d+)*\]')
+        for rec in recommendations_for_template:
+            for key in rec:
+                if isinstance(rec[key], str):
+                    rec[key] = _rx_pattern.sub('', rec[key]).strip()
+        quick_wins_raw = report_data.get("quick_wins", [])[:3]
+        quick_wins_clean = [_rx_pattern.sub('', w).strip() for w in quick_wins_raw if isinstance(w, str)]
+
         # Prepare template variables
         template_vars = {
             "business_name": business_name,
@@ -696,7 +706,7 @@ async def render_html_report(state: ReportState) -> dict:
             "competitor_comparisons": report_data.get("competitor_comparisons", []),
             "insights": insights_for_template,
             "recommendations": recommendations_for_template,
-            "quick_wins": report_data.get("quick_wins", [])[:3],
+            "quick_wins": quick_wins_clean,
             "review_responses": report_data.get("review_responses", []),
         }
 
