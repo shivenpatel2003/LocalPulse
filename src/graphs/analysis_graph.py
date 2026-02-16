@@ -14,6 +14,7 @@ Uses Claude Haiku for cost-efficient analysis with structured outputs.
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
@@ -290,7 +291,8 @@ For each theme found:
 - Whether it's a strength or weakness
 - 2-3 direct quotes from reviewers (copy their exact words, English only)
 
-Then list top 3 specific strengths and top 3 specific areas needing improvement.
+Then list top 3 specific strengths and up to 3 specific areas needing improvement.
+IMPORTANT: Only include genuine concerns where reviewers explicitly express dissatisfaction, complaints, or frustration. Do NOT reinterpret positive comments as negatives. Do NOT stretch compliments into criticisms. If the reviews are overwhelmingly positive with no real complaints, return an empty list for areas needing improvement. Zero weaknesses is a valid and expected output for highly-rated businesses.
 Write a 2-sentence summary focused on what makes this business distinctive.""",
     ),
 ])
@@ -379,18 +381,19 @@ RECOMMENDATIONS_PROMPT = ChatPromptTemplate.from_messages([
         "system",
         """You are a business consultant giving SPECIFIC, data-backed recommendations. This could be any type of business — adapt to whatever industry the data describes.
 
-CRITICAL: Recommendations must reference actual data from the analysis.
-- BAD: "Enhance customer service training"
-- GOOD: "Your 2 lowest-rated reviews both mention long wait times on weekends. Consider implementing an appointment or queue management system for peak hours."
+GROUNDING RULES:
+1. ONLY reference information that explicitly appears in the numbered reviews above.
+2. Every recommendation MUST cite at least one review using [RX] notation.
+3. NEVER invent or fabricate quotes. Only use words that actually appear in a review.
+4. NEVER fabricate statistics, percentages, or competitor data not in the reviews.
+5. If fewer than 5 recommendations have genuine evidence, return fewer. 3 grounded recommendations are better than 5 hallucinated ones.
 
-ANTI-HALLUCINATION RULES:
-- NEVER invent or fabricate statistics, percentages, or specific numbers that are not directly stated in the reviews provided.
-- NEVER claim a competitor uses a specific tool or system unless it is explicitly mentioned in their reviews.
-- If you don't have data for a claim, don't make the claim. Base every recommendation ONLY on evidence from the actual reviews.
-- Do NOT reference reviews you haven't seen (e.g. "25% of 1-star reviews") — only reference the reviews provided to you.
+Example of a well-grounded recommendation:
+- GOOD: "Reviews [R3] and [R7] both mention long wait times on weekends. Consider implementing a queue management system for peak hours."
+- BAD: "Enhance customer service training" (no review cited, vague)
 
 Rules:
-1. Each recommendation must cite the specific review data that motivates it
+1. Each recommendation must cite specific [RX] reviews that motivate it
 2. Implementation steps must be concrete actions, not vague suggestions
 3. Expected outcomes should be measurable where possible
 4. Quick wins = things you can do THIS WEEK. Not "improve training over time."
@@ -399,15 +402,20 @@ Categories: service, offerings, marketing, operations, staff, environment, value
     ),
     (
         "human",
-        """Create specific recommendations for {business_name}:
+        """Create specific recommendations for {business_name}.
 
+Here are the actual customer reviews (use [RX] tags to cite them):
+
+{reviews_text}
+
+Analysis summary:
 Insights: {insights_text}
 Strengths to leverage: {strengths}
 Weaknesses to fix: {weaknesses}
 
-Generate 5-8 recommendations. For each:
+Generate recommendations grounded in the reviews above. For each:
 1. Specific title referencing the actual issue
-2. What the data says (cite review counts, quotes, competitor names)
+2. Which reviews support this (cite [RX] tags)
 3. Exactly what to do (concrete steps, not platitudes)
 4. What success looks like (measurable outcome)
 5. Priority: high/medium/low
@@ -1079,17 +1087,43 @@ async def generate_recommendations(state: AnalysisState) -> dict:
         insights = state.get("insights", [])
         insights_text = "\n".join([f"- {insight}" for insight in insights])
 
+        # Format actual review texts for the prompt (most recent 30)
+        reviews = state.get("reviews", [])
+        recent_reviews = reviews[:30]
+        review_lines = []
+        for i, r in enumerate(recent_reviews, 1):
+            stars = "\u2605" * int(r.get("rating", 0)) + "\u2606" * (5 - int(r.get("rating", 0)))
+            text = r.get("text", "No text")
+            review_lines.append(f'[R{i}] {stars} "{text}"')
+        reviews_text = "\n".join(review_lines)
+        max_review_num = len(recent_reviews)
+
         llm = _get_llm()
         structured_llm = llm.with_structured_output(RecommendationsResult)
 
         prompt = RECOMMENDATIONS_PROMPT.format(
             business_name=business_name,
+            reviews_text=reviews_text or "No reviews available",
             insights_text=insights_text or "No insights available",
             strengths=", ".join(strengths) if strengths else "Not identified",
             weaknesses=", ".join(weaknesses) if weaknesses else "Not identified",
         )
 
         result: RecommendationsResult = await structured_llm.ainvoke(prompt)
+
+        # Validate [RX] references — strip any that cite non-existent reviews
+        valid_pattern = re.compile(r"\[R(\d+)\]")
+        for rec in result.recommendations:
+            refs = valid_pattern.findall(rec.description)
+            invalid_refs = [ref for ref in refs if int(ref) > max_review_num or int(ref) < 1]
+            if invalid_refs:
+                logger.warning(
+                    "recommendation_invalid_review_refs",
+                    recommendation=rec.title,
+                    invalid_refs=[f"[R{r}]" for r in invalid_refs],
+                )
+                for ref in invalid_refs:
+                    rec.description = rec.description.replace(f"[R{ref}]", "")
 
         logger.info(
             "analysis_recommendations_complete",

@@ -228,6 +228,13 @@ HTML_REPORT_TEMPLATE = """
             </div>
             {% endfor %}
         </div>
+        {% else %}
+        <div style="padding:30px;border-bottom:1px solid #eee;">
+            <h2 style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 20px 0;padding-bottom:10px;border-bottom:3px solid #ff9800;display:inline-block;">What Needs Attention</h2>
+            <div style="padding:12px 16px;background:#f0fdf4;border-left:4px solid #22c55e;border-radius:4px;color:#166534;margin-top:8px;">
+                ✓ No significant concerns found in recent reviews
+            </div>
+        </div>
         {% endif %}
 
         <!-- Competitive Position -->

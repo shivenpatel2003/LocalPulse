@@ -518,38 +518,56 @@ class GooglePlacesCollector:
         if not details.get("lat") or not details.get("lng"):
             raise GooglePlacesError("Place location not available")
 
-        # Get the primary type for filtering
-        primary_type = details.get("primary_type", "restaurant")
+        # Get the primary type for filtering — skip if unknown
+        primary_type = details.get("primary_type")
+        if not primary_type:
+            logger.warning(
+                "no_primary_type_for_competitor_search",
+                place_id=place_id,
+            )
+            return []
 
-        # Build nearby search request
-        data = {
-            "locationRestriction": {
-                "circle": {
-                    "center": {
-                        "latitude": details["lat"],
-                        "longitude": details["lng"],
-                    },
-                    "radius": float(radius_meters),
-                }
-            },
-            "includedTypes": [primary_type],
-            "maxResultCount": min(max_results, 20),
-            "languageCode": "en",
-        }
-
-        response = await self._request(
-            "POST",
-            "places:searchNearby",
-            json_data=data,
-            field_mask=PLACE_BASIC_FIELDS,
-        )
-
-        # Filter out the reference place itself
         reference_id = place_id if place_id.startswith("places/") else f"places/{place_id}"
-        places = [
-            p for p in response.get("places", [])
-            if p.get("id") != reference_id and p.get("id") != details.get("id")
-        ]
+        places: list[dict[str, Any]] = []
+
+        # Search with expanding radius until we have 3+ competitors
+        for radius in [1000, 3000, 5000]:
+            data = {
+                "locationRestriction": {
+                    "circle": {
+                        "center": {
+                            "latitude": details["lat"],
+                            "longitude": details["lng"],
+                        },
+                        "radius": float(radius),
+                    }
+                },
+                "includedPrimaryTypes": [primary_type],
+                "maxResultCount": min(max_results, 20),
+                "languageCode": "en",
+            }
+
+            response = await self._request(
+                "POST",
+                "places:searchNearby",
+                json_data=data,
+                field_mask=PLACE_BASIC_FIELDS,
+            )
+
+            # Filter out the reference place itself
+            places = [
+                p for p in response.get("places", [])
+                if p.get("id") != reference_id and p.get("id") != details.get("id")
+            ]
+
+            if len(places) >= 3:
+                break
+
+            logger.info(
+                "competitor_search_expanding_radius",
+                radius=radius,
+                found=len(places),
+            )
 
         return [
             {
