@@ -569,6 +569,51 @@ class GooglePlacesCollector:
                 found=len(places),
             )
 
+        # Fallback: Text Search if Nearby Search found fewer than 3
+        if len(places) < 3:
+            # Extract city from address (take middle segment, e.g. "London" from "94B Wallis Rd, London E9 5LN, UK")
+            address = details.get("address", "")
+            parts = [p.strip() for p in address.split(",")]
+            city = parts[1] if len(parts) >= 3 else ""
+            # Strip postcodes — drop segments that start with a digit
+            if city and city[0].isdigit():
+                city = parts[2] if len(parts) >= 4 else ""
+
+            if city:
+                text_query = f"{primary_type} in {city}"
+            else:
+                biz_name = details.get("name", primary_type)
+                text_query = f"{biz_name} {primary_type}"
+
+            logger.info(
+                "competitor_search_text_fallback",
+                query=text_query,
+                nearby_found=len(places),
+            )
+
+            text_data = {
+                "textQuery": text_query,
+                "includedType": primary_type,
+                "maxResultCount": 10,
+                "languageCode": "en",
+            }
+
+            text_response = await self._request(
+                "POST",
+                "places:searchText",
+                json_data=text_data,
+                field_mask=PLACE_BASIC_FIELDS,
+            )
+
+            # Deduplicate by place ID against existing nearby results
+            existing_ids = {p.get("id") for p in places}
+            existing_ids.add(reference_id)
+            existing_ids.add(details.get("id"))
+            for p in text_response.get("places", []):
+                if p.get("id") not in existing_ids:
+                    places.append(p)
+                    existing_ids.add(p.get("id"))
+
         return [
             {
                 "id": place.get("id"),
