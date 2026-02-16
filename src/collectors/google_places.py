@@ -530,44 +530,55 @@ class GooglePlacesCollector:
         reference_id = place_id if place_id.startswith("places/") else f"places/{place_id}"
         places: list[dict[str, Any]] = []
 
+        # Generic types where Nearby Search returns too many unrelated results
+        # For these, skip straight to semantic Text Search
+        GENERIC_TYPES = {
+            "consultant", "corporate_office", "office", "establishment",
+            "store", "general_contractor", "point_of_interest",
+            "professional_services", "business_center",
+        }
+
+        skip_nearby = primary_type in GENERIC_TYPES
+
         # Search with expanding radius until we have 3+ competitors
-        for radius in [1000, 3000, 5000]:
-            data = {
-                "locationRestriction": {
-                    "circle": {
-                        "center": {
-                            "latitude": details["lat"],
-                            "longitude": details["lng"],
-                        },
-                        "radius": float(radius),
-                    }
-                },
-                "includedPrimaryTypes": [primary_type],
-                "maxResultCount": min(max_results, 20),
-                "languageCode": "en",
-            }
+        if not skip_nearby:
+            for radius in [1000, 3000, 5000]:
+                data = {
+                    "locationRestriction": {
+                        "circle": {
+                            "center": {
+                                "latitude": details["lat"],
+                                "longitude": details["lng"],
+                            },
+                            "radius": float(radius),
+                        }
+                    },
+                    "includedPrimaryTypes": [primary_type],
+                    "maxResultCount": min(max_results, 20),
+                    "languageCode": "en",
+                }
 
-            response = await self._request(
-                "POST",
-                "places:searchNearby",
-                json_data=data,
-                field_mask=PLACE_BASIC_FIELDS,
-            )
+                response = await self._request(
+                    "POST",
+                    "places:searchNearby",
+                    json_data=data,
+                    field_mask=PLACE_BASIC_FIELDS,
+                )
 
-            # Filter out the reference place itself
-            places = [
-                p for p in response.get("places", [])
-                if p.get("id") != reference_id and p.get("id") != details.get("id")
-            ]
+                # Filter out the reference place itself
+                places = [
+                    p for p in response.get("places", [])
+                    if p.get("id") != reference_id and p.get("id") != details.get("id")
+                ]
 
-            if len(places) >= 3:
-                break
+                if len(places) >= 3:
+                    break
 
-            logger.info(
-                "competitor_search_expanding_radius",
-                radius=radius,
-                found=len(places),
-            )
+                logger.info(
+                    "competitor_search_expanding_radius",
+                    radius=radius,
+                    found=len(places),
+                )
 
         # Fallback: Text Search if Nearby Search found fewer than 3
         if len(places) < 3:
