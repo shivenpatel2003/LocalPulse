@@ -387,6 +387,7 @@ GROUNDING RULES:
 3. NEVER invent or fabricate quotes. Only use words that actually appear in a review.
 4. NEVER fabricate statistics, percentages, or competitor data not in the reviews.
 5. If fewer than 5 recommendations have genuine evidence, return fewer. 3 grounded recommendations are better than 5 hallucinated ones.
+6. For highly-rated businesses with no significant issues, recommendations should focus on GROWTH OPPORTUNITIES — ways to leverage existing strengths, expand what's working, and capitalise on positive customer sentiment. Not every recommendation needs to address a problem. "Double down on what customers already love" is a valid recommendation if the reviews support it.
 
 Example of a well-grounded recommendation:
 - GOOD: "Reviews [R3] and [R7] both mention long wait times on weekends. Consider implementing a queue management system for peak hours."
