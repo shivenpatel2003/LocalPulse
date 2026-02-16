@@ -7,6 +7,7 @@ API Reference: https://developers.google.com/maps/documentation/places/web-servi
 """
 
 import asyncio
+import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
@@ -589,6 +590,8 @@ class GooglePlacesCollector:
             # Strip postcodes — drop segments that start with a digit
             if city and city[0].isdigit():
                 city = parts[2] if len(parts) >= 4 else ""
+            # Strip trailing UK postcodes (e.g., "London E9 5LN" → "London")
+            city = re.sub(r'\s+[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d?[A-Z]{0,2}\s*$', '', city).strip()
 
             # Extract descriptive category from business name
             # Handles patterns like "M90x | 90-Day Business Coaching" → "90-Day Business Coaching"
@@ -601,6 +604,11 @@ class GooglePlacesCollector:
                     # Take the longer part (usually the description, not the brand)
                     descriptive_part = max(parts_split, key=lambda x: len(x.strip())).strip()
                     break
+
+            # Strip leading time/number patterns that make queries too specific
+            # e.g., "90-Day Business Coaching" → "Business Coaching"
+            # e.g., "12-Week Fitness Program" → "Fitness Program"
+            descriptive_part = re.sub(r'^\d+[-\s]?(day|week|month|year|hour|session|step)s?\s+', '', descriptive_part, flags=re.IGNORECASE).strip()
 
             if city:
                 text_query = f"{descriptive_part} in {city}"
