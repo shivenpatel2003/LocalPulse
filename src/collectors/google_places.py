@@ -579,11 +579,22 @@ class GooglePlacesCollector:
             if city and city[0].isdigit():
                 city = parts[2] if len(parts) >= 4 else ""
 
+            # Extract descriptive category from business name
+            # Handles patterns like "M90x | 90-Day Business Coaching" → "90-Day Business Coaching"
+            # or "Costa - Coffee Shop" → "Coffee Shop"
+            biz_name = details.get("name", "")
+            descriptive_part = biz_name
+            for delimiter in ["|", " - ", " – ", " — "]:
+                if delimiter in biz_name:
+                    parts_split = biz_name.split(delimiter)
+                    # Take the longer part (usually the description, not the brand)
+                    descriptive_part = max(parts_split, key=lambda x: len(x.strip())).strip()
+                    break
+
             if city:
-                text_query = f"{primary_type} in {city}"
+                text_query = f"{descriptive_part} in {city}"
             else:
-                biz_name = details.get("name", primary_type)
-                text_query = f"{biz_name} {primary_type}"
+                text_query = descriptive_part
 
             logger.info(
                 "competitor_search_text_fallback",
@@ -593,9 +604,17 @@ class GooglePlacesCollector:
 
             text_data = {
                 "textQuery": text_query,
-                "includedType": primary_type,
                 "maxResultCount": 10,
                 "languageCode": "en",
+                "locationBias": {
+                    "circle": {
+                        "center": {
+                            "latitude": details["lat"],
+                            "longitude": details["lng"],
+                        },
+                        "radius": 50000.0,
+                    }
+                },
             }
 
             text_response = await self._request(
@@ -613,6 +632,10 @@ class GooglePlacesCollector:
                 if p.get("id") not in existing_ids:
                     places.append(p)
                     existing_ids.add(p.get("id"))
+
+            # Also filter out results with very similar names to the target business
+            target_name_lower = details.get("name", "").lower()
+            places = [p for p in places if target_name_lower not in p.get("displayName", {}).get("text", "").lower()]
 
         return [
             {
