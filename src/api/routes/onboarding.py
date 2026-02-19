@@ -94,6 +94,11 @@ class ConfirmOnboardingRequest(BaseModel):
         pattern="^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$",
     )
     schedule_hour: int = Field(9, ge=0, le=23)
+    referral_code: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Referral code from signup link",
+    )
 
 
 class OnboardingResponse(BaseModel):
@@ -461,6 +466,7 @@ async def confirm_onboarding(
             "is_active": True,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
+            **({"referral_code": request.referral_code} if request.referral_code else {}),
         }
         supabase.table("clients").insert(client_data).execute()
 

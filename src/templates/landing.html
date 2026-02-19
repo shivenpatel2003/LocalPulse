@@ -1113,6 +1113,7 @@
                 <label for="customer_email">Your email</label>
                 <input type="email" id="customer_email" name="customer_email" placeholder="you@yourbusiness.com" required>
             </div>
+            <input type="hidden" id="referral-code" name="referral_code" value="">
             <button type="button" class="btn btn-primary btn-arrow" id="signup-btn" onclick="handleSignup()">
                 Get My First Report for £25/month
             </button>
@@ -1135,6 +1136,11 @@
 
 <!-- ===== SCRIPTS ===== -->
 <script>
+    // Referral code tracking
+    const urlParams = new URLSearchParams(window.location.search);
+    const ref = urlParams.get('ref');
+    if (ref) { document.getElementById('referral-code').value = ref; }
+
     // Scroll animations
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
@@ -1186,6 +1192,7 @@
                 body: JSON.stringify({
                     customer_email: email,
                     business_name: business,
+                    referral_code: document.getElementById('referral-code').value || undefined,
                 }),
             });
 

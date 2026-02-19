@@ -51,6 +51,11 @@ class CreateCheckoutRequest(BaseModel):
         description="Name of the business subscribing",
         json_schema_extra={"example": "The Corner Cafe"},
     )
+    referral_code: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional referral code from ?ref= URL parameter",
+    )
 
 
 class CreateCheckoutResponse(BaseModel):
@@ -114,6 +119,7 @@ async def create_checkout(
             metadata={
                 "business_name": request.business_name,
                 "customer_email": request.customer_email,
+                **({"referral_code": request.referral_code} if request.referral_code else {}),
             },
         )
 
@@ -221,6 +227,7 @@ async def get_session_info(session_id: str = "") -> dict:
         return {
             "customer_email": session.customer_email or "",
             "business_name": (session.metadata or {}).get("business_name", ""),
+            "referral_code": (session.metadata or {}).get("referral_code", ""),
         }
     except stripe.StripeError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)[:100])

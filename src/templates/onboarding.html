@@ -350,6 +350,7 @@
     let currentConfig = null;
     let stripeEmail = '';
     let stripeBizName = '';
+    let referralCode = '';
     const stripeSessionId = '{{ session_id }}';
 
     /* ===== Init: fetch Stripe session info ===== */
@@ -361,6 +362,7 @@
             const data = await res.json();
             stripeEmail = data.customer_email || '';
             stripeBizName = data.business_name || '';
+            referralCode = data.referral_code || '';
             if (stripeBizName) {
               document.getElementById('confirm-name').value = stripeBizName;
             }
@@ -507,6 +509,7 @@
             schedule_frequency: freq,
             schedule_day: day,
             schedule_hour: hour,
+            referral_code: referralCode || undefined,
           }),
         });
         if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Something went wrong'); }
